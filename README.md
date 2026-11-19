@@ -38,6 +38,7 @@ scripts/              benchmark & utilitas
 https://mdzs.ridwanafazn.workers.dev
 
 Fase 0 selesai: passcode auth, Neon, CRUD proyek/dokumen, dan AI aktif via OpenCode Go.
+Fase 1 selesai: intake → analysis → adaptive interview → stack → PRD full length.
 
 ## Local Development
 

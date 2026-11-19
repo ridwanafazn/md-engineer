@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "deploy": "npm run build && node scripts/prepare-deploy.mjs && wrangler deploy",
     "check": "tsc --noEmit",
+    "smoke:phase1": "node scripts/phase1-smoke.mjs",
     "db:push": "drizzle-kit push",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

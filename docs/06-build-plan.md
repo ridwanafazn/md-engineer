@@ -24,20 +24,23 @@
 
 ---
 
-## Fase 1 — Vertical Slice
+## Fase 1 — Vertical Slice (selesai)
 
 **Tujuan:** satu ide → analisis → interview → PRD.
 
-- Intake form (teks).
-- Analisis produk via AI (JSON terstruktur).
-- Adaptive interview 3–8 pertanyaan.
-- Rekomendasi stack.
-- Generate PRD.
-- Simpan ke Neon.
-- Tampilkan di workspace.
-- Streaming progress.
+- [x] Intake form (teks) + daftar proyek.
+- [x] Analisis produk via AI (JSON terstruktur).
+- [x] Adaptive interview 3–8 pertanyaan + jawaban custom.
+- [x] Rekomendasi stack yang bisa diedit.
+- [x] Generate PRD dengan streaming.
+- [x] Simpan analysis, interview, stack, dan PRD ke Neon.
+- [x] Tampilkan PRD di workspace tiga panel.
+- [x] Auth passcode + navigasi wizard.
+- [x] API interview: list, replace, answer.
+- [x] Smoke test end-to-end.
 
-**Acceptance:** satu proyek menghasilkan PRD full length, tersimpan, bisa diedit.
+**Acceptance:** satu proyek menghasilkan PRD full length, tersimpan, dan bisa dibuka di workspace.
+**Hasil smoke:** analysis 2 roles/11 fitur, 3 interview, PRD 2.278 kata, 1 dokumen, cleanup OK.
 
 ---
 

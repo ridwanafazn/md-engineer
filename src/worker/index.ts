@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { z } from "zod";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { documents, projects } from "../db/schema";
+import { documents, interviewQuestions, projects } from "../db/schema";
 import { DOC_TYPES, type DocType } from "../shared/types";
 
 type Bindings = {
@@ -198,7 +198,89 @@ app.get("/api/projects/:id", async (c) => {
   const [project] = await db.select().from(projects).where(eq(projects.id, c.req.param("id")));
   if (!project) return c.json({ error: "not_found" }, 404);
   const docs = await db.select().from(documents).where(eq(documents.projectId, project.id));
-  return c.json({ project, documents: docs });
+  const interview = await db
+    .select()
+    .from(interviewQuestions)
+    .where(eq(interviewQuestions.projectId, project.id))
+    .orderBy(interviewQuestions.position);
+  return c.json({ project, documents: docs, interview });
+});
+
+const interviewQuestionInput = z.object({
+  id: z.string().min(1).max(80),
+  question: z.string().min(1).max(2_000),
+  options: z
+    .array(
+      z.object({
+        value: z.string().min(1).max(200),
+        label: z.string().min(1).max(400),
+        consequence: z.string().max(1_000).optional(),
+      }),
+    )
+    .max(8)
+    .default([]),
+  allowCustom: z.boolean().default(true),
+  rationale: z.string().max(2_000).default(""),
+  dependsOn: z.unknown().optional(),
+});
+
+app.get("/api/projects/:id/interview", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const db = getDb(c.env.DATABASE_URL);
+  const rows = await db
+    .select()
+    .from(interviewQuestions)
+    .where(eq(interviewQuestions.projectId, c.req.param("id")))
+    .orderBy(interviewQuestions.position);
+  return c.json({ questions: rows });
+});
+
+app.put("/api/projects/:id/interview", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const parsed = z
+    .object({ questions: z.array(interviewQuestionInput).min(1).max(12) })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "invalid_request", details: parsed.error.flatten() }, 400);
+
+  const projectId = c.req.param("id");
+  const db = getDb(c.env.DATABASE_URL);
+  await db.delete(interviewQuestions).where(eq(interviewQuestions.projectId, projectId));
+  const rows = await db
+    .insert(interviewQuestions)
+    .values(
+      parsed.data.questions.map((question, index) => ({
+        projectId,
+        position: index,
+        question: question.question,
+        options: question.options,
+        allowCustom: question.allowCustom,
+        rationale: question.rationale,
+        dependsOn: question.dependsOn ?? null,
+      })),
+    )
+    .returning();
+  return c.json({ questions: rows }, 201);
+});
+
+app.patch("/api/projects/:id/interview/:questionId", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const parsed = z
+    .object({ answer: z.string().min(1).max(10_000) })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
+  const db = getDb(c.env.DATABASE_URL);
+  const [question] = await db
+    .update(interviewQuestions)
+    .set({ answer: parsed.data.answer, answeredAt: new Date() })
+    .where(
+      and(
+        eq(interviewQuestions.id, c.req.param("questionId")),
+        eq(interviewQuestions.projectId, c.req.param("id")),
+      ),
+    )
+    .returning();
+  if (!question) return c.json({ error: "not_found" }, 404);
+  return c.json({ question });
 });
 
 app.patch("/api/projects/:id", async (c) => {
