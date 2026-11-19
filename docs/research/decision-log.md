@@ -1,5 +1,7 @@
 # Decision Log — Personal Spec Compiler
 
+> **Catatan:** dokumen ini adalah log riset historis. Keputusan final ada di `docs/00-product.md` dan `docs/03-adr.md`.
+
 > Status: **draft, belum implementasi**. Dokumen ini mengunci keputusan dari diskusi dan menandai hal yang masih terbuka.
 
 ---

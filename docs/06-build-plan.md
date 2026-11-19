@@ -16,7 +16,7 @@
 - [x] Build lokal lolos.
 - [x] Smoke test: login, create project, upsert document, delete.
 - [x] Deploy `workers.dev`.
-- [ ] Commit awal.
+- [x] Commit awal dan push ke GitHub.
 
 **Live:** https://mdzs.ridwanafzn.workers.dev
 
