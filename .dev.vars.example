@@ -1,0 +1,7 @@
+MDZS_PASSCODE=replace-with-a-long-random-passphrase
+MDZS_SESSION_SECRET=replace-with-a-long-random-secret
+OPENCODE_API_KEY=oc_your_key_here
+OPENCODE_BASE_URL=https://opencode.ai/inference/go/openai/v1
+OPENCODE_MODEL=deepseek-v4.1-flash
+OPENCODE_REASONING_EFFORT=max
+DATABASE_URL=postgresql://user:password@host/db?sslmode=require
