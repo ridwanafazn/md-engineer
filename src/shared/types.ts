@@ -95,3 +95,68 @@ export type DocPlanItem = {
   dependsOn: DocType[];
   sections: string[];
 };
+
+export type SpecField = {
+  name: string;
+  type: string;
+  required: boolean;
+  description: string;
+};
+
+export type SpecEntity = {
+  name: string;
+  description: string;
+  fields: SpecField[];
+};
+
+export type SpecEndpoint = {
+  id: string;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  path: string;
+  auth: boolean;
+  description: string;
+  request: string;
+  response: string;
+};
+
+export type SpecRequirement = {
+  id: string;
+  statement: string;
+  priority: "mvp" | "later";
+  acceptance: string[];
+};
+
+export type SpecFlow = {
+  name: string;
+  actor: string;
+  steps: string[];
+};
+
+export type SpecBusinessRule = {
+  id: string;
+  rule: string;
+  consequence: string;
+};
+
+export type SpecDecision = {
+  title: string;
+  decision: string;
+  rationale: string;
+};
+
+export type SpecModel = {
+  project: {
+    name: string;
+    summary: string;
+    stack: Record<string, string>;
+  };
+  roles: { name: string; description: string; permissions: string[] }[];
+  entities: SpecEntity[];
+  endpoints: SpecEndpoint[];
+  requirements: SpecRequirement[];
+  flows: SpecFlow[];
+  businessRules: SpecBusinessRule[];
+  nonFunctional: string[];
+  openQuestions: string[];
+  decisions: SpecDecision[];
+};

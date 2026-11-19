@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { z } from "zod";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { documents, interviewQuestions, projects } from "../db/schema";
+import { documentVersions, documents, interviewQuestions, projects } from "../db/schema";
 import { DOC_TYPES, type DocType } from "../shared/types";
 
 type Bindings = {
@@ -318,7 +318,52 @@ app.put("/api/projects/:id/documents", async (c) => {
   const db = getDb(c.env.DATABASE_URL);
   const projectId = c.req.param("id");
   const wordCount = parsed.data.contentMd.trim() ? parsed.data.contentMd.trim().split(/\s+/).length : 0;
-  const [doc] = await db
+  const status = parsed.data.status ?? "draft";
+
+  const [existing] = await db
+    .select()
+    .from(documents)
+    .where(and(eq(documents.projectId, projectId), eq(documents.type, parsed.data.type)));
+
+  if (existing) {
+    if (existing.contentMd === parsed.data.contentMd) {
+      const [updated] = await db
+        .update(documents)
+        .set({
+          title: parsed.data.title,
+          status,
+          wordCount,
+          updatedAt: new Date(),
+        })
+        .where(eq(documents.id, existing.id))
+        .returning();
+      return c.json({ document: updated });
+    }
+
+    await db.insert(documentVersions).values({
+      documentId: existing.id,
+      version: existing.version,
+      contentMd: existing.contentMd,
+      reason: "before update",
+    });
+
+    const [updated] = await db
+      .update(documents)
+      .set({
+        title: parsed.data.title,
+        contentMd: parsed.data.contentMd,
+        status,
+        wordCount,
+        version: existing.version + 1,
+        generatedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(documents.id, existing.id))
+      .returning();
+    return c.json({ document: updated });
+  }
+
+  const [created] = await db
     .insert(documents)
     .values({
       projectId,
@@ -326,28 +371,65 @@ app.put("/api/projects/:id/documents", async (c) => {
       title: parsed.data.title,
       slug: `${parsed.data.type.toLowerCase()}.md`,
       contentMd: parsed.data.contentMd,
-      status: parsed.data.status ?? "draft",
+      status,
       wordCount,
+      generatedAt: new Date(),
       updatedAt: new Date(),
     })
-    .onConflictDoUpdate({
-      target: [documents.projectId, documents.type],
-      set: {
-        title: parsed.data.title,
-        contentMd: parsed.data.contentMd,
-        status: parsed.data.status ?? "draft",
-        wordCount,
-        updatedAt: new Date(),
-        version: sqlIncrement(),
-      },
-    })
     .returning();
-  return c.json({ document: doc });
+
+  await db.insert(documentVersions).values({
+    documentId: created.id,
+    version: created.version,
+    contentMd: created.contentMd,
+    reason: "initial",
+  });
+
+  return c.json({ document: created });
 });
 
-function sqlIncrement() {
-  return sql`${documents.version} + 1`;
-}
+app.patch("/api/projects/:id/documents/:type", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const parsed = z
+    .object({ status: z.enum(["draft", "generating", "verified", "stale"]) })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
+  const db = getDb(c.env.DATABASE_URL);
+  const [document] = await db
+    .update(documents)
+    .set({ status: parsed.data.status, updatedAt: new Date() })
+    .where(
+      and(
+        eq(documents.projectId, c.req.param("id")),
+        eq(documents.type, c.req.param("type")),
+      ),
+    )
+    .returning();
+  if (!document) return c.json({ error: "not_found" }, 404);
+  return c.json({ document });
+});
+
+app.get("/api/projects/:id/documents/:type/versions", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const db = getDb(c.env.DATABASE_URL);
+  const [document] = await db
+    .select()
+    .from(documents)
+    .where(
+      and(
+        eq(documents.projectId, c.req.param("id")),
+        eq(documents.type, c.req.param("type")),
+      ),
+    );
+  if (!document) return c.json({ error: "not_found" }, 404);
+
+  const versions = await db
+    .select()
+    .from(documentVersions)
+    .where(eq(documentVersions.documentId, document.id))
+    .orderBy(desc(documentVersions.version));
+  return c.json({ versions });
+});
 
 const aiSchema = z.object({
   messages: z

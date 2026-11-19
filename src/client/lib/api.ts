@@ -1,4 +1,4 @@
-import type { ProjectAnalysis, StackRecommendation } from "@/shared/types";
+import type { ProjectAnalysis, SpecModel, StackRecommendation } from "@/shared/types";
 
 export type Project = {
   id: string;
@@ -10,7 +10,7 @@ export type Project = {
   analysis: ProjectAnalysis | null;
   stack: StackRecommendation | null;
   docPlan: unknown;
-  specModel: unknown;
+  specModel: SpecModel | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -38,6 +38,15 @@ export type DocumentRow = {
   version: number;
   wordCount: number;
   updatedAt: string;
+};
+
+export type DocumentVersion = {
+  id: string;
+  documentId: string;
+  version: number;
+  contentMd: string;
+  reason: string;
+  createdAt: string;
 };
 
 export type ProjectDetail = {
@@ -109,6 +118,13 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(input),
     }),
+  updateDocumentStatus: (id: string, type: string, status: string) =>
+    request<{ document: DocumentRow }>(`/api/projects/${id}/documents/${type}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  listVersions: (id: string, type: string) =>
+    request<{ versions: DocumentVersion[] }>(`/api/projects/${id}/documents/${type}/versions`),
 
   getInterview: (id: string) => request<{ questions: InterviewRow[] }>(`/api/projects/${id}/interview`),
   saveInterview: (

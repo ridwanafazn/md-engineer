@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/client/components/AppShell";
+import { DocumentGenerator } from "@/client/components/DocumentGenerator";
 import { api, type InterviewRow, type ProjectDetail } from "@/client/lib/api";
-import { aiJson, aiStream } from "@/client/lib/ai";
+import { aiJson } from "@/client/lib/ai";
 import {
   analysisMessages,
   interviewMessages,
-  prdMessages,
   stackMessages,
   type AnsweredQuestion,
 } from "@/client/lib/prompts";
@@ -17,7 +17,7 @@ const STEPS: { id: Step; label: string; hint: string }[] = [
   { id: "analysis", label: "Analisis", hint: "Roles, fitur, kompleksitas" },
   { id: "interview", label: "Interview", hint: "3–8 pertanyaan adaptif" },
   { id: "stack", label: "Stack", hint: "Rekomendasi teknologi" },
-  { id: "generate", label: "PRD", hint: "Dokumen pertama" },
+  { id: "generate", label: "Dokumen", hint: "SpecModel + 15 dokumen" },
 ];
 
 type EditableStackField =
@@ -59,11 +59,9 @@ export function WizardPage({
   const [questionIndex, setQuestionIndex] = useState(0);
   const [draftAnswer, setDraftAnswer] = useState("");
   const [stack, setStack] = useState<StackRecommendation | null>(null);
-  const [prd, setPrd] = useState("");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const [prdSaved, setPrdSaved] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -86,12 +84,6 @@ export function WizardPage({
 
         const firstUnanswered = data.interview.findIndex((question) => !question.answer);
         setQuestionIndex(firstUnanswered >= 0 ? firstUnanswered : 0);
-
-        const prdDoc = data.documents.find((document) => document.type === "PRD");
-        if (prdDoc) {
-          setPrd(prdDoc.contentMd);
-          setPrdSaved(true);
-        }
 
         if (!nextAnalysis) setStep("analysis");
         else if (data.interview.length === 0 || data.interview.some((question) => !question.answer)) {
@@ -242,56 +234,6 @@ export function WizardPage({
       setStep("generate");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Gagal menyimpan stack.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function generatePrd() {
-    if (!analysis || !stack || !detail) return;
-    setBusy(true);
-    setError("");
-    setStatus("Menulis PRD lengkap. Jangan tutup tab ini…");
-    setPrd("");
-    setPrdSaved(false);
-    let text = "";
-    try {
-      await aiStream(
-        prdMessages({
-          idea: detail.project.idea,
-          analysis,
-          answers: answered,
-          stack: stack as unknown as Record<string, unknown>,
-        }),
-        `prd-${projectId}`,
-        (delta) => {
-          text += delta;
-          setPrd(text);
-        },
-        96_000,
-      );
-
-      const words = text.trim() ? text.trim().split(/\s+/).length : 0;
-      if (words < 200) throw new Error("PRD terlalu pendek. Coba generate ulang.");
-
-      const openQuestionsIndex = text.indexOf("## 13. Open Questions");
-      const bodyWithoutOpenQuestions =
-        openQuestionsIndex >= 0 ? text.slice(0, openQuestionsIndex) : text;
-      const hasPlaceholder = /\bTBD\b/i.test(bodyWithoutOpenQuestions);
-      const documentStatus = words >= 800 && !hasPlaceholder ? "verified" : "draft";
-
-      await api.upsertDocument(projectId, {
-        type: "PRD",
-        title: "Product Requirements",
-        contentMd: text,
-        status: documentStatus,
-      });
-      await api.updateProject(projectId, { status: "ready" });
-      setPrdSaved(true);
-      setStatus(`PRD selesai: ${words} kata, status ${documentStatus}.`);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Gagal membuat PRD.");
-      setStatus("");
     } finally {
       setBusy(false);
     }
@@ -658,7 +600,7 @@ export function WizardPage({
                       disabled={busy}
                       className="neu-button rounded-2xl px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
                     >
-                      Setujui & lanjut ke PRD →
+                      Setujui & lanjut ke dokumen →
                     </button>
                     <button
                       onClick={generateStack}
@@ -674,56 +616,20 @@ export function WizardPage({
           ) : null}
 
           {step === "generate" ? (
-            <section className="neu p-6">
-              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                Langkah 4
-              </p>
-              <h2 className="mt-1 text-2xl font-semibold tracking-tight">PRD pertama</h2>
-
-              {!prd ? (
-                <div className="mt-5">
-                  <p className="max-w-2xl text-sm leading-6 text-[var(--muted)]">
-                    PRD akan ditulis full length: visi, problem, roles, scope, fitur, user stories,
-                    requirement ber-ID, non-functional, metrik, risiko, dan open questions.
-                  </p>
-                  <button
-                    onClick={generatePrd}
-                    disabled={busy || !analysis || !stack}
-                    className="neu-button mt-5 rounded-2xl px-5 py-3 text-sm font-semibold text-white disabled:opacity-50"
-                  >
-                    {busy ? "Menulis PRD…" : "Generate PRD"}
-                  </button>
-                </div>
-              ) : (
-                <div className="mt-5 space-y-4">
-                  <div className="flex flex-wrap items-center justify-between gap-3">
-                    <span className="neu-inset rounded-full px-3 py-1.5 text-xs text-[var(--muted)]">
-                      {prd.trim().split(/\s+/).length} kata · {prdSaved ? "tersimpan" : "belum tersimpan"}
-                    </span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={generatePrd}
-                        disabled={busy}
-                        className="neu-button rounded-xl px-4 py-2 text-xs font-medium text-[var(--text)] disabled:opacity-50"
-                      >
-                        Generate ulang
-                      </button>
-                      <button
-                        onClick={() => onComplete(projectId)}
-                        disabled={!prdSaved || busy}
-                        className="neu-button rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                      >
-                        Buka workspace →
-                      </button>
-                    </div>
-                  </div>
-
-                  <pre className="neu-inset max-h-[60vh] overflow-auto whitespace-pre-wrap rounded-2xl p-5 font-sans text-sm leading-7">
-                    {prd}
-                  </pre>
-                </div>
-              )}
-            </section>
+            analysis && stack ? (
+              <DocumentGenerator
+                projectId={projectId}
+                detail={detail}
+                analysis={analysis}
+                answers={answered}
+                stack={stack}
+                onComplete={onComplete}
+              />
+            ) : (
+              <section className="neu p-6 text-sm text-[var(--muted)]">
+                Selesaikan analisis dan stack terlebih dahulu.
+              </section>
+            )
           ) : null}
         </main>
       </div>

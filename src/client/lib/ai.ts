@@ -21,7 +21,11 @@ function extractJsonText(text: string): string {
   return candidate.slice(start, end + 1);
 }
 
-async function postAi(body: Record<string, unknown>): Promise<Response> {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function postAiOnce(body: Record<string, unknown>): Promise<Response> {
   const response = await fetch("/api/ai", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -43,21 +47,21 @@ async function postAi(body: Record<string, unknown>): Promise<Response> {
   return response;
 }
 
-export async function aiJson<T>(messages: ChatMessage[], sessionId: string, maxTokens = 12_000): Promise<T> {
-  const response = await postAi({
-    messages,
-    sessionId,
-    stream: false,
-    json: true,
-    maxTokens,
-  });
-
-  const payload = (await response.json()) as OpenAIResponse;
-  const content = payload.choices?.[0]?.message?.content;
-  if (!content) {
-    throw new Error(payload.error?.message ?? "AI mengembalikan respons kosong.");
+async function postAi(body: Record<string, unknown>): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await postAiOnce(body);
+    } catch (caught) {
+      lastError = caught;
+      if (attempt < 3) await sleep(1_500 * attempt);
+    }
   }
+  throw lastError instanceof Error ? lastError : new Error("AI gagal setelah retry.");
+}
 
+export async function aiJson<T>(messages: ChatMessage[], sessionId: string, maxTokens = 12_000): Promise<T> {
+  const content = await aiStream(messages, sessionId, () => undefined, maxTokens, true);
   return JSON.parse(extractJsonText(content)) as T;
 }
 
@@ -66,12 +70,13 @@ export async function aiStream(
   sessionId: string,
   onDelta: (delta: string) => void,
   maxTokens = 64_000,
+  json = false,
 ): Promise<string> {
   const response = await postAi({
     messages,
     sessionId,
     stream: true,
-    json: false,
+    json,
     maxTokens,
   });
 

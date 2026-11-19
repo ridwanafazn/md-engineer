@@ -1,4 +1,5 @@
-import type { ProjectAnalysis } from "@/shared/types";
+import type { DocType, ProjectAnalysis, SpecModel } from "@/shared/types";
+import { DOC_DEPS, DOC_PURPOSE, DOC_SECTIONS } from "./docs";
 import type { ChatMessage } from "./ai";
 
 export type AnsweredQuestion = {
@@ -169,6 +170,107 @@ Aturan:
     {
       role: "user",
       content: `Ide produk:\n${input.idea}\n\nAnalisis:\n${JSON.stringify(input.analysis, null, 2)}\n\nJawaban interview:\n${formatAnswers(input.answers)}\n\nStack:\n${JSON.stringify(input.stack, null, 2)}\n\nTulis PRD lengkap.`,
+    },
+  ];
+}
+
+export function specModelMessages(input: {
+  idea: string;
+  analysis: ProjectAnalysis;
+  answers: AnsweredQuestion[];
+  stack: Record<string, unknown>;
+}): ChatMessage[] {
+  return [
+    {
+      role: "system",
+      content: `Anda adalah software architect. Bangun SpecModel kanonik yang menjadi satu-satunya sumber kebenaran untuk 15 dokumen.
+
+Kembalikan HANYA satu objek JSON valid. Tanpa markdown, tanpa code fence.
+
+Skema:
+{
+  "project": { "name": "nama", "summary": "ringkasan", "stack": { "frontend": "", "backend": "", "database": "", "auth": "", "storage": "", "payment": "", "deployment": "" } },
+  "roles": [ { "name": "", "description": "", "permissions": [""] } ],
+  "entities": [ { "name": "snake_case", "description": "", "fields": [ { "name": "snake_case", "type": "text|uuid|integer|boolean|timestamp|jsonb|numeric", "required": true, "description": "" } ] } ],
+  "endpoints": [ { "id": "EP-001", "method": "GET", "path": "/api/...", "auth": true, "description": "", "request": "", "response": "" } ],
+  "requirements": [ { "id": "REQ-001", "statement": "", "priority": "mvp", "acceptance": [""] } ],
+  "flows": [ { "name": "", "actor": "", "steps": [""] } ],
+  "businessRules": [ { "id": "BR-001", "rule": "", "consequence": "" } ],
+  "nonFunctional": [""],
+  "openQuestions": [""],
+  "decisions": [ { "title": "", "decision": "", "rationale": "" } ]
+}
+
+Aturan:
+- 3-6 entities, 5-15 endpoints, 8-20 requirements, 2-5 flows, 2-6 business rules, 2-5 nonFunctional, 2-5 openQuestions, 2-5 decisions.
+- Semua ID unik dan berurutan.
+- Entity dan field memakai snake_case.
+- Endpoint path dimulai dengan /api/.
+- Requirements harus bisa diuji, punya acceptance criteria.
+- Roles harus konsisten dengan analisis.
+- Jangan mengarang integrasi, entity, atau endpoint yang tidak tersirat dari ide, analisis, interview, dan stack.
+- Gunakan Bahasa Indonesia untuk deskripsi; nama teknis tetap English.`,
+    },
+    {
+      role: "user",
+      content: `Ide:\n${input.idea}\n\nAnalisis:\n${JSON.stringify(input.analysis, null, 2)}\n\nJawaban interview:\n${formatAnswers(input.answers)}\n\nStack:\n${JSON.stringify(input.stack, null, 2)}\n\nBangun SpecModel.`,
+    },
+  ];
+}
+
+export function documentMessages(
+  type: DocType,
+  input: {
+    idea: string;
+    analysis: ProjectAnalysis;
+    answers: AnsweredQuestion[];
+    stack: Record<string, unknown>;
+    specModel: SpecModel;
+    dependencies: Partial<Record<DocType, string>>;
+  },
+): ChatMessage[] {
+  const sections = DOC_SECTIONS[type].map((section, index) => `${index + 1}. ${section}`).join("\n");
+  const dependencyDocs = DOC_DEPS[type]
+    .map((dependency) => {
+      const content = input.dependencies[dependency];
+      if (!content) return "";
+      const trimmed = content.length > 8_000 ? `${content.slice(0, 8_000)}\n\n[...dipotong...]` : content;
+      return `--- ${dependency}.md ---\n${trimmed}`;
+    })
+    .filter(Boolean)
+    .join("\n\n");
+
+  return [
+    {
+      role: "system",
+      content: `Anda adalah technical writer senior. Tulis dokumen ${type}.md untuk proyek "${input.specModel.project.name}".
+
+Tujuan dokumen: ${DOC_PURPOSE[type]}.
+
+SpecModel adalah satu-satunya sumber kebenaran. Jangan mengarang entity, endpoint, requirement, role, atau aturan yang tidak ada di SpecModel. Gunakan ID kanonik (REQ-xxx, EP-xxx, BR-xxx) dan nama entity yang sama.
+
+Section wajib:
+${sections}
+
+Aturan:
+- Markdown murni. Jangan membungkus seluruh dokumen dalam code fence.
+- Bahasa Indonesia; istilah teknis boleh English.
+- Minimal 800 kata. PRD minimal 1.500 kata.
+- Spesifik, bisa diuji, tanpa basa-basi.
+- Jangan memakai placeholder TBD di luar "Open Questions".
+- Jika ada ketidakpastian, tulis di Open Questions.
+- Dokumen ini harus konsisten dengan dokumen dependensi; jangan menyalin mentah, gunakan sebagai konteks.
+- Untuk ARCHITECTURE: wajib menyertakan minimal satu diagram Mermaid \`graph TD\` dan satu \`sequenceDiagram\`.
+- Untuk DATABASE: jelaskan entity, field, relasi, index, dan constraint.
+- Untuk API: gunakan endpoint dari SpecModel; sertakan method, path, auth, request, response, dan error.
+- Untuk REQUIREMENTS: setiap requirement memakai ID dan acceptance criteria.
+- Untuk TESTING: petakan test ke ID requirement.
+- Untuk TASKS: gunakan ID requirement dan urutan implementasi.
+- Untuk README: sertakan peta seluruh 15 dokumen.`,
+    },
+    {
+      role: "user",
+      content: `Ide:\n${input.idea}\n\nAnalisis:\n${JSON.stringify(input.analysis, null, 2)}\n\nJawaban interview:\n${formatAnswers(input.answers)}\n\nStack:\n${JSON.stringify(input.stack, null, 2)}\n\nSpecModel:\n${JSON.stringify(input.specModel, null, 2)}\n\nDokumen dependensi:\n${dependencyDocs || "(tidak ada)"}\n\nTulis ${type}.md sekarang.`,
     },
   ];
 }

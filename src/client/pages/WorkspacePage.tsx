@@ -1,6 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/client/components/AppShell";
-import { api, type ProjectDetail } from "@/client/lib/api";
+import { DiffView } from "@/client/components/DiffView";
+import { MarkdownView } from "@/client/components/MarkdownView";
+import { api, type DocumentVersion, type ProjectDetail } from "@/client/lib/api";
+import { lintDocuments, type LintReport } from "@/client/lib/lint";
 import { DOC_LABELS, DOC_TYPES, type DocType } from "@/shared/types";
 
 const STATUS_LABEL: Record<string, string> = {
@@ -9,6 +12,8 @@ const STATUS_LABEL: Record<string, string> = {
   verified: "Verified",
   stale: "Stale",
 };
+
+type Tab = "preview" | "raw" | "diff";
 
 export function WorkspacePage({
   projectId,
@@ -23,7 +28,11 @@ export function WorkspacePage({
 }) {
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [selected, setSelected] = useState<DocType>("PRD");
-  const [tab, setTab] = useState<"preview" | "raw">("preview");
+  const [tab, setTab] = useState<Tab>("preview");
+  const [versions, setVersions] = useState<DocumentVersion[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [lintReport, setLintReport] = useState<LintReport | null>(null);
+  const [lintLoading, setLintLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -33,8 +42,11 @@ export function WorkspacePage({
       try {
         const data = await api.getProject(projectId);
         setDetail(data);
-        const prd = data.documents.find((document) => document.type === "PRD");
-        if (!prd) setSelected("PRD");
+        setLintLoading(true);
+        void lintDocuments(data.documents, data.project.specModel ?? null)
+          .then(setLintReport)
+          .catch(() => setLintReport(null))
+          .finally(() => setLintLoading(false));
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Gagal memuat workspace.");
       } finally {
@@ -44,6 +56,37 @@ export function WorkspacePage({
   }, [projectId]);
 
   const selectedDoc = detail?.documents.find((document) => document.type === selected);
+
+  useEffect(() => {
+    if (tab !== "diff" || !selectedDoc) return;
+    let alive = true;
+    setVersionsLoading(true);
+    void api
+      .listVersions(projectId, selected)
+      .then((result) => {
+        if (alive) setVersions(result.versions);
+      })
+      .catch(() => {
+        if (alive) setVersions([]);
+      })
+      .finally(() => {
+        if (alive) setVersionsLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [tab, selected, projectId, selectedDoc?.version]);
+
+  const previousVersion = useMemo(() => {
+    if (!selectedDoc) return null;
+    return (
+      versions
+        .filter((version) => version.version < selectedDoc.version)
+        .sort((a, b) => b.version - a.version)[0] ?? null
+    );
+  }, [versions, selectedDoc]);
+
+  const selectedIssues = lintReport?.byType[selected] ?? [];
   const completed = detail?.documents.length ?? 0;
 
   if (loading) {
@@ -64,7 +107,7 @@ export function WorkspacePage({
 
   return (
     <AppShell onLogout={onLogout} onHome={onBack} projectName={detail.project.name}>
-      <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)_320px]">
+      <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)_340px]">
         <aside className="neu flex max-h-[calc(100vh-8rem)] flex-col p-4">
           <div className="mb-3 flex items-center justify-between px-1">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
@@ -77,6 +120,8 @@ export function WorkspacePage({
             {DOC_TYPES.map((type, index) => {
               const document = detail.documents.find((item) => item.type === type);
               const active = selected === type;
+              const issues = lintReport?.byType[type] ?? [];
+              const hasError = issues.some((issue) => issue.severity === "error");
               return (
                 <button
                   key={type}
@@ -91,14 +136,16 @@ export function WorkspacePage({
                   <span className="min-w-0 flex-1 truncate">{type}.md</span>
                   <span
                     className={`text-[9px] uppercase tracking-wide ${
-                      document?.status === "verified"
-                        ? "text-emerald-600"
-                        : document
-                          ? "text-amber-600"
-                          : "opacity-40"
+                      hasError
+                        ? "text-red-600"
+                        : document?.status === "verified"
+                          ? "text-emerald-600"
+                          : document
+                            ? "text-amber-600"
+                            : "opacity-40"
                     }`}
                   >
-                    {document ? (STATUS_LABEL[document.status] ?? document.status) : "—"}
+                    {hasError ? "Issue" : document ? (STATUS_LABEL[document.status] ?? document.status) : "—"}
                   </span>
                 </button>
               );
@@ -128,28 +175,23 @@ export function WorkspacePage({
               <h2 className="text-lg font-semibold">{selected}.md</h2>
             </div>
             <div className="flex gap-1 rounded-xl p-1 neu-inset">
-              <button
-                onClick={() => setTab("preview")}
-                className={`rounded-lg px-3 py-1.5 text-xs ${
-                  tab === "preview" ? "font-medium text-[var(--text)]" : "text-[var(--muted)]"
-                }`}
-              >
-                Rich Preview
-              </button>
-              <button
-                onClick={() => setTab("raw")}
-                className={`rounded-lg px-3 py-1.5 text-xs ${
-                  tab === "raw" ? "font-medium text-[var(--text)]" : "text-[var(--muted)]"
-                }`}
-              >
-                Raw Markdown
-              </button>
-              <button
-                disabled
-                className="rounded-lg px-3 py-1.5 text-xs text-[var(--muted)] opacity-50"
-              >
-                Diff Compare
-              </button>
+              {(
+                [
+                  ["preview", "Rich Preview"],
+                  ["raw", "Raw Markdown"],
+                  ["diff", "Diff Compare"],
+                ] as const
+              ).map(([value, label]) => (
+                <button
+                  key={value}
+                  onClick={() => setTab(value)}
+                  className={`rounded-lg px-3 py-1.5 text-xs ${
+                    tab === value ? "font-medium text-[var(--text)]" : "text-[var(--muted)]"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 
@@ -167,16 +209,30 @@ export function WorkspacePage({
                   {STATUS_LABEL[selectedDoc.status] ?? selectedDoc.status}
                 </span>
                 <span>{selectedDoc.wordCount} kata</span>
+                {selectedIssues.length > 0 ? (
+                  <span className="rounded-full bg-red-50 px-2.5 py-1 text-red-700">
+                    {selectedIssues.length} isu lint
+                  </span>
+                ) : null}
                 <span className="ml-auto">{DOC_LABELS[selected]}</span>
               </div>
               <div className="flex-1 overflow-auto p-5">
-                <pre
-                  className={`whitespace-pre-wrap text-sm leading-7 ${
-                    tab === "raw" ? "font-mono text-[13px]" : "font-sans"
-                  }`}
-                >
-                  {selectedDoc.contentMd}
-                </pre>
+                {tab === "preview" ? (
+                  <MarkdownView markdown={selectedDoc.contentMd} />
+                ) : tab === "raw" ? (
+                  <pre className="whitespace-pre-wrap font-mono text-[13px] leading-7">
+                    {selectedDoc.contentMd}
+                  </pre>
+                ) : versionsLoading ? (
+                  <div className="neu-inset rounded-2xl p-5 text-sm text-[var(--muted)]">
+                    Memuat versi…
+                  </div>
+                ) : (
+                  <DiffView
+                    oldText={previousVersion?.contentMd ?? ""}
+                    newText={selectedDoc.contentMd}
+                  />
+                )}
               </div>
             </>
           ) : (
@@ -187,8 +243,7 @@ export function WorkspacePage({
                 </div>
                 <h3 className="text-xl font-semibold">{selected}.md belum dibuat</h3>
                 <p className="mt-2 text-sm leading-6 text-[var(--muted)]">
-                  Dokumen ini akan tersedia setelah wizard dan fase berikutnya. Untuk sekarang,
-                  lanjutkan wizard untuk menyelesaikan PRD.
+                  Jalankan wizard untuk menghasilkan SpecModel dan 15 dokumen.
                 </p>
                 <button
                   onClick={() => onResume(projectId)}
@@ -214,18 +269,55 @@ export function WorkspacePage({
 
           <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
             <div className="neu-inset rounded-2xl p-4 text-sm leading-6 text-[var(--muted)]">
-              PRD sudah tersedia. Fase 2 akan menambahkan 14 dokumen lainnya, linter konsistensi,
-              dan rich preview.
+              Rich preview, Mermaid, diff, dan version snapshot aktif. Fase 3 akan menambahkan chat
+              dan impact analysis.
             </div>
+
+            <div className="neu-inset rounded-2xl p-4">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold">Lint · {selected}.md</p>
+                <span
+                  className={`text-[10px] uppercase tracking-wide ${
+                    lintLoading
+                      ? "text-[var(--muted)]"
+                      : selectedIssues.some((issue) => issue.severity === "error")
+                        ? "text-red-600"
+                        : "text-emerald-600"
+                  }`}
+                >
+                  {lintLoading ? "Memeriksa" : selectedIssues.length === 0 ? "Bersih" : `${selectedIssues.length} isu`}
+                </span>
+              </div>
+              {!lintLoading && selectedIssues.length > 0 ? (
+                <ul className="mt-2 space-y-1.5 text-[11px] leading-5">
+                  {selectedIssues.map((issue, index) => (
+                    <li
+                      key={`${selected}-${index}`}
+                      className={issue.severity === "error" ? "text-red-700" : "text-amber-700"}
+                    >
+                      [{issue.severity}] {issue.message}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {lintReport ? (
+                <p className="mt-3 border-t border-white/50 pt-2 text-[10px] text-[var(--muted)]">
+                  Total: {lintReport.errors} error · {lintReport.warnings} warning
+                </p>
+              ) : null}
+            </div>
+
             <div className="rounded-2xl bg-white/35 p-4 text-xs leading-6 text-[var(--muted)]">
-              <p className="font-medium text-[var(--text)]">Kontek proyek</p>
+              <p className="font-medium text-[var(--text)]">Konteks proyek</p>
               <ul className="mt-2 space-y-1">
                 <li>Status: {detail.project.status}</li>
                 <li>Dokumen: {completed} / 15</li>
                 <li>Bahasa: {detail.project.language}</li>
                 <li>Interview: {detail.interview.length} pertanyaan</li>
+                <li>SpecModel: {detail.project.specModel ? "tersedia" : "belum"}</li>
               </ul>
             </div>
+
             {detail.project.analysis ? (
               <div className="rounded-2xl bg-white/25 p-4 text-xs leading-6 text-[var(--muted)]">
                 <p className="font-medium text-[var(--text)]">Kompleksitas</p>

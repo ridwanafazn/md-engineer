@@ -44,20 +44,25 @@
 
 ---
 
-## Fase 2 — 15 Dokumen + Workspace
+## Fase 2 — 15 Dokumen + Workspace (selesai)
 
 **Tujuan:** semua dokumen dan linter.
 
-- Doc plan adaptif.
-- SpecModel kanonik.
-- Generate Wave 1 dan Wave 2.
-- Workspace tiga panel penuh.
-- Rich Preview / Raw Markdown / Diff.
-- Linter deterministik.
-- Status `draft`/`verified`/`stale`.
-- Mermaid render.
+- [x] Doc plan adaptif.
+- [x] SpecModel kanonik (roles, entities, endpoints, requirements, flows, rules).
+- [x] Generate Wave 1 dan Wave 2.
+- [x] Workspace tiga panel penuh.
+- [x] Rich Preview dengan Markdown + Mermaid.
+- [x] Raw Markdown.
+- [x] Diff Compare + version snapshot.
+- [x] Linter deterministik (heading, REQ, endpoint, entity, Mermaid, TBD).
+- [x] Status `draft`/`verified`/`stale`.
+- [x] API status dokumen + daftar versi.
+- [x] Stream JSON untuk SpecModel (menghindari headers timeout).
+- [x] Retry untuk request AI.
 
 **Acceptance:** 15 dokumen dihasilkan, 100% lolos lint referensi dan Mermaid.
+**Hasil full smoke:** 15/15 dokumen, total ±61.363 kata, **0 error, 0 warning**, project status `ready`. Mermaid terverifikasi di browser (flowchart dan sequence).
 
 ---
 
