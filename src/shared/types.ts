@@ -160,3 +160,19 @@ export type SpecModel = {
   openQuestions: string[];
   decisions: SpecDecision[];
 };
+
+export type ImpactPlan = {
+  required: boolean;
+  summary: string;
+  affected: {
+    doc: DocType;
+    sections: string[];
+    instruction: string;
+    reason: string;
+  }[];
+};
+
+export type ChatResponse = {
+  reply: string;
+  impact: ImpactPlan;
+};

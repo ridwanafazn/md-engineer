@@ -3,7 +3,13 @@ import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import { z } from "zod";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { documentVersions, documents, interviewQuestions, projects } from "../db/schema";
+import {
+  chatMessages,
+  documentVersions,
+  documents,
+  interviewQuestions,
+  projects,
+} from "../db/schema";
 import { DOC_TYPES, type DocType } from "../shared/types";
 
 type Bindings = {
@@ -311,6 +317,113 @@ app.get("/api/projects/:id/documents", async (c) => {
   return c.json({ documents: docs });
 });
 
+app.get("/api/projects/:id/chat", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const db = getDb(c.env.DATABASE_URL);
+  const messages = await db
+    .select()
+    .from(chatMessages)
+    .where(eq(chatMessages.projectId, c.req.param("id")))
+    .orderBy(chatMessages.createdAt);
+  return c.json({ messages });
+});
+
+const chatMessageInput = z.object({
+  role: z.enum(["user", "assistant", "system"]),
+  content: z.string().min(1).max(100_000),
+  impactPlan: z.unknown().optional(),
+});
+
+app.post("/api/projects/:id/chat", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const parsed = chatMessageInput.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
+  const db = getDb(c.env.DATABASE_URL);
+  const [message] = await db
+    .insert(chatMessages)
+    .values({
+      projectId: c.req.param("id"),
+      role: parsed.data.role,
+      content: parsed.data.content,
+      impactPlan: parsed.data.impactPlan ?? null,
+    })
+    .returning();
+  return c.json({ message }, 201);
+});
+
+app.get("/api/projects/:id/documents/:type/versions", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const db = getDb(c.env.DATABASE_URL);
+  const [document] = await db
+    .select()
+    .from(documents)
+    .where(
+      and(
+        eq(documents.projectId, c.req.param("id")),
+        eq(documents.type, c.req.param("type")),
+      ),
+    );
+  if (!document) return c.json({ error: "not_found" }, 404);
+
+  const versions = await db
+    .select()
+    .from(documentVersions)
+    .where(eq(documentVersions.documentId, document.id))
+    .orderBy(desc(documentVersions.version));
+  return c.json({ versions, currentVersion: document.version });
+});
+
+app.post("/api/projects/:id/documents/:type/restore", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const parsed = z.object({ version: z.number().int().min(1) }).safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
+
+  const db = getDb(c.env.DATABASE_URL);
+  const [document] = await db
+    .select()
+    .from(documents)
+    .where(
+      and(
+        eq(documents.projectId, c.req.param("id")),
+        eq(documents.type, c.req.param("type")),
+      ),
+    );
+  if (!document) return c.json({ error: "not_found" }, 404);
+
+  const [snapshot] = await db
+    .select()
+    .from(documentVersions)
+    .where(
+      and(
+        eq(documentVersions.documentId, document.id),
+        eq(documentVersions.version, parsed.data.version),
+      ),
+    );
+  if (!snapshot) return c.json({ error: "version_not_found" }, 404);
+  if (snapshot.contentMd === document.contentMd) return c.json({ document });
+
+  await db.insert(documentVersions).values({
+    documentId: document.id,
+    version: document.version,
+    contentMd: document.contentMd,
+    reason: "before restore",
+  });
+
+  const wordCount = snapshot.contentMd.trim() ? snapshot.contentMd.trim().split(/\s+/).length : 0;
+  const [restored] = await db
+    .update(documents)
+    .set({
+      contentMd: snapshot.contentMd,
+      status: "draft",
+      version: document.version + 1,
+      wordCount,
+      updatedAt: new Date(),
+    })
+    .where(eq(documents.id, document.id))
+    .returning();
+  return c.json({ document: restored });
+});
+
 app.put("/api/projects/:id/documents", async (c) => {
   if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
   const parsed = upsertDocumentSchema.safeParse(await c.req.json().catch(() => null));
@@ -407,28 +520,6 @@ app.patch("/api/projects/:id/documents/:type", async (c) => {
     .returning();
   if (!document) return c.json({ error: "not_found" }, 404);
   return c.json({ document });
-});
-
-app.get("/api/projects/:id/documents/:type/versions", async (c) => {
-  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
-  const db = getDb(c.env.DATABASE_URL);
-  const [document] = await db
-    .select()
-    .from(documents)
-    .where(
-      and(
-        eq(documents.projectId, c.req.param("id")),
-        eq(documents.type, c.req.param("type")),
-      ),
-    );
-  if (!document) return c.json({ error: "not_found" }, 404);
-
-  const versions = await db
-    .select()
-    .from(documentVersions)
-    .where(eq(documentVersions.documentId, document.id))
-    .orderBy(desc(documentVersions.version));
-  return c.json({ versions });
 });
 
 const aiSchema = z.object({

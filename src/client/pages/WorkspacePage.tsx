@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/client/components/AppShell";
+import { ChatPanel } from "@/client/components/ChatPanel";
 import { DiffView } from "@/client/components/DiffView";
 import { MarkdownView } from "@/client/components/MarkdownView";
 import { api, type DocumentVersion, type ProjectDetail } from "@/client/lib/api";
@@ -31,31 +32,43 @@ export function WorkspacePage({
   const [tab, setTab] = useState<Tab>("preview");
   const [versions, setVersions] = useState<DocumentVersion[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
+  const [compareVersion, setCompareVersion] = useState<number | "previous">("previous");
+  const [restoring, setRestoring] = useState(false);
+  const [restoreError, setRestoreError] = useState("");
   const [lintReport, setLintReport] = useState<LintReport | null>(null);
-  const [lintLoading, setLintLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    void (async () => {
-      setLoading(true);
+  const loadProject = useCallback(
+    async (showLoading = false) => {
+      if (showLoading) setLoading(true);
       try {
         const data = await api.getProject(projectId);
         setDetail(data);
-        setLintLoading(true);
-        void lintDocuments(data.documents, data.project.specModel ?? null)
-          .then(setLintReport)
-          .catch(() => setLintReport(null))
-          .finally(() => setLintLoading(false));
+        const report = await lintDocuments(data.documents, data.project.specModel ?? null).catch(
+          () => null,
+        );
+        setLintReport(report);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Gagal memuat workspace.");
       } finally {
-        setLoading(false);
+        if (showLoading) setLoading(false);
       }
-    })();
-  }, [projectId]);
+    },
+    [projectId],
+  );
+
+  useEffect(() => {
+    void loadProject(true);
+  }, [loadProject]);
 
   const selectedDoc = detail?.documents.find((document) => document.type === selected);
+
+  useEffect(() => {
+    setCompareVersion("previous");
+    setVersions([]);
+    setRestoreError("");
+  }, [selected]);
 
   useEffect(() => {
     if (tab !== "diff" || !selectedDoc) return;
@@ -86,8 +99,35 @@ export function WorkspacePage({
     );
   }, [versions, selectedDoc]);
 
+  const compareSnapshot =
+    compareVersion === "previous"
+      ? previousVersion
+      : (versions.find((version) => version.version === compareVersion) ?? previousVersion);
+
   const selectedIssues = lintReport?.byType[selected] ?? [];
   const completed = detail?.documents.length ?? 0;
+
+  async function restoreSnapshot() {
+    if (!compareSnapshot) return;
+    const confirmed = window.confirm(
+      `Restore ${selected}.md ke versi v${compareSnapshot.version}? Versi saat ini akan disimpan sebagai snapshot.`,
+    );
+    if (!confirmed) return;
+
+    setRestoring(true);
+    setRestoreError("");
+    try {
+      await api.restoreVersion(projectId, selected, compareSnapshot.version);
+      await loadProject(false);
+      const result = await api.listVersions(projectId, selected);
+      setVersions(result.versions);
+      setCompareVersion("previous");
+    } catch (caught) {
+      setRestoreError(caught instanceof Error ? caught.message : "Gagal restore versi.");
+    } finally {
+      setRestoring(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -107,7 +147,7 @@ export function WorkspacePage({
 
   return (
     <AppShell onLogout={onLogout} onHome={onBack} projectName={detail.project.name}>
-      <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)_340px]">
+      <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)_360px]">
         <aside className="neu flex max-h-[calc(100vh-8rem)] flex-col p-4">
           <div className="mb-3 flex items-center justify-between px-1">
             <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
@@ -228,10 +268,40 @@ export function WorkspacePage({
                     Memuat versi…
                   </div>
                 ) : (
-                  <DiffView
-                    oldText={previousVersion?.contentMd ?? ""}
-                    newText={selectedDoc.contentMd}
-                  />
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={String(compareVersion)}
+                        onChange={(event) =>
+                          setCompareVersion(
+                            event.target.value === "previous"
+                              ? "previous"
+                              : Number(event.target.value),
+                          )
+                        }
+                        className="neu-inset rounded-xl px-3 py-2 text-xs outline-none focus:ring-2 focus:ring-[var(--accent)]"
+                      >
+                        <option value="previous">Versi sebelumnya</option>
+                        {versions.map((version) => (
+                          <option key={version.version} value={version.version}>
+                            v{version.version} · {version.reason || "snapshot"}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => void restoreSnapshot()}
+                        disabled={!compareSnapshot || restoring}
+                        className="neu-button rounded-xl px-3 py-2 text-xs font-medium text-[var(--text)] disabled:opacity-50"
+                      >
+                        {restoring ? "Restore…" : "Restore versi ini"}
+                      </button>
+                      {restoreError ? <span className="text-xs text-red-600">{restoreError}</span> : null}
+                    </div>
+                    <DiffView
+                      oldText={compareSnapshot?.contentMd ?? ""}
+                      newText={selectedDoc.contentMd}
+                    />
+                  </div>
                 )}
               </div>
             </>
@@ -262,87 +332,12 @@ export function WorkspacePage({
         </section>
 
         <aside className="neu flex min-h-[calc(100vh-8rem)] flex-col p-4">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-            AI Assistant
-          </p>
-          <h2 className="mt-1 text-lg font-semibold">Spec architect</h2>
-
-          <div className="mt-4 flex-1 space-y-3 overflow-y-auto pr-1">
-            <div className="neu-inset rounded-2xl p-4 text-sm leading-6 text-[var(--muted)]">
-              Rich preview, Mermaid, diff, dan version snapshot aktif. Fase 3 akan menambahkan chat
-              dan impact analysis.
-            </div>
-
-            <div className="neu-inset rounded-2xl p-4">
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-semibold">Lint · {selected}.md</p>
-                <span
-                  className={`text-[10px] uppercase tracking-wide ${
-                    lintLoading
-                      ? "text-[var(--muted)]"
-                      : selectedIssues.some((issue) => issue.severity === "error")
-                        ? "text-red-600"
-                        : "text-emerald-600"
-                  }`}
-                >
-                  {lintLoading ? "Memeriksa" : selectedIssues.length === 0 ? "Bersih" : `${selectedIssues.length} isu`}
-                </span>
-              </div>
-              {!lintLoading && selectedIssues.length > 0 ? (
-                <ul className="mt-2 space-y-1.5 text-[11px] leading-5">
-                  {selectedIssues.map((issue, index) => (
-                    <li
-                      key={`${selected}-${index}`}
-                      className={issue.severity === "error" ? "text-red-700" : "text-amber-700"}
-                    >
-                      [{issue.severity}] {issue.message}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {lintReport ? (
-                <p className="mt-3 border-t border-white/50 pt-2 text-[10px] text-[var(--muted)]">
-                  Total: {lintReport.errors} error · {lintReport.warnings} warning
-                </p>
-              ) : null}
-            </div>
-
-            <div className="rounded-2xl bg-white/35 p-4 text-xs leading-6 text-[var(--muted)]">
-              <p className="font-medium text-[var(--text)]">Konteks proyek</p>
-              <ul className="mt-2 space-y-1">
-                <li>Status: {detail.project.status}</li>
-                <li>Dokumen: {completed} / 15</li>
-                <li>Bahasa: {detail.project.language}</li>
-                <li>Interview: {detail.interview.length} pertanyaan</li>
-                <li>SpecModel: {detail.project.specModel ? "tersedia" : "belum"}</li>
-              </ul>
-            </div>
-
-            {detail.project.analysis ? (
-              <div className="rounded-2xl bg-white/25 p-4 text-xs leading-6 text-[var(--muted)]">
-                <p className="font-medium text-[var(--text)]">Kompleksitas</p>
-                <p className="mt-1 capitalize">{detail.project.analysis.complexity}</p>
-                <p className="mt-2">{detail.project.analysis.summary}</p>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="mt-4">
-            <div className="neu-inset flex items-end gap-2 rounded-2xl p-3">
-              <textarea
-                rows={2}
-                disabled
-                placeholder="Chat assistant tersedia di Fase 3…"
-                className="max-h-32 min-h-[2.5rem] flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-[var(--muted)]"
-              />
-              <button
-                disabled
-                className="neu-button flex h-9 w-9 items-center justify-center rounded-xl text-sm font-semibold text-white opacity-50"
-              >
-                ↑
-              </button>
-            </div>
-          </div>
+          <ChatPanel
+            projectId={projectId}
+            detail={detail}
+            selected={selected}
+            onDocsChanged={() => loadProject(false)}
+          />
         </aside>
       </div>
     </AppShell>

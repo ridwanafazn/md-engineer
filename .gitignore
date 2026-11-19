@@ -7,6 +7,8 @@ dist/
 !.env.example
 !.dev.vars.example
 drizzle/meta/
+scripts/phase2-*.mjs
+scripts/phase3-*.mjs
 *.log
 .DS_Store
 Thumbs.db

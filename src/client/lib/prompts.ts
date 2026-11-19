@@ -218,6 +218,118 @@ Aturan:
   ];
 }
 
+export function chatImpactMessages(input: {
+  projectName: string;
+  idea: string;
+  specModel: SpecModel;
+  documents: { type: DocType; contentMd: string }[];
+  selectedType: DocType;
+  history: { role: "user" | "assistant"; content: string }[];
+  userMessage: string;
+}): ChatMessage[] {
+  const docMap = input.documents
+    .map((document) => {
+      const headings = document.contentMd
+        .split(/\r?\n/)
+        .filter((line) => /^#{1,3}\s+/.test(line))
+        .slice(0, 18)
+        .join(" | ");
+      const excerpt = document.contentMd.replace(/\s+/g, " ").slice(0, 700);
+      return `- ${document.type}: ${headings || "(tanpa heading)"}\n  ${excerpt}`;
+    })
+    .join("\n");
+
+  const selected = input.documents.find((document) => document.type === input.selectedType);
+  const selectedContent = selected?.contentMd
+    ? selected.contentMd.length > 20_000
+      ? `${selected.contentMd.slice(0, 20_000)}\n\n[...dipotong...]`
+      : selected.contentMd
+    : "(dokumen belum dibuat)";
+
+  const history = input.history
+    .slice(-10)
+    .map((message) => `${message.role.toUpperCase()}: ${message.content}`)
+    .join("\n");
+
+  return [
+    {
+      role: "system",
+      content: `Anda adalah spec architect untuk proyek "${input.projectName}". Jawab pengguna dalam Bahasa Indonesia.
+
+Jika pengguna meminta perubahan spesifikasi, kembalikan impact plan. Jika hanya bertanya, required=false.
+
+Kembalikan HANYA satu objek JSON valid:
+{
+  "reply": "jawaban singkat untuk pengguna",
+  "impact": {
+    "required": true,
+    "summary": "ringkasan dampak",
+    "affected": [
+      {
+        "doc": "API",
+        "sections": ["Endpoints"],
+        "instruction": "instruksi revisi yang spesifik",
+        "reason": "mengapa dokumen ini terdampak"
+      }
+    ]
+  }
+}
+
+Aturan:
+- "doc" hanya salah satu dari: PRD, DESIGN, REQUIREMENTS, FEATURES, USER_FLOW, DATABASE, API, BUSINESS_RULES, ARCHITECTURE, SECURITY, TESTING, ROADMAP, DECISIONS, TASKS, README.
+- Maksimal 6 dokumen terdampak. Pilih yang benar-benar perlu berubah.
+- "instruction" harus operasional: apa yang ditambah/diubah/dihapus, di section mana.
+- Jika required=false, affected harus array kosong.
+- Jangan mengarang entity, endpoint, requirement, atau role di luar SpecModel. Jika perubahan menuntut model baru, sertakan DATABASE/API/REQUIREMENTS sebagai dokumen terdampak.
+- Jangan menulis ulang dokumen di sini. Hanya rencana.
+- Bahasa Indonesia; istilah teknis boleh English.`,
+    },
+    {
+      role: "user",
+      content: `Ide produk:\n${input.idea}\n\nSpecModel:\n${JSON.stringify(input.specModel, null, 2)}\n\nPeta dokumen:\n${docMap}\n\nDokumen aktif (${input.selectedType}):\n${selectedContent}\n\nRiwayat chat:\n${history || "(belum ada)"}\n\nPermintaan pengguna:\n${input.userMessage}\n\nKembalikan JSON sesuai skema.`,
+    },
+  ];
+}
+
+export function revisionMessages(input: {
+  type: DocType;
+  instruction: string;
+  currentContent: string;
+  specModel: SpecModel;
+  relatedDocs: Partial<Record<DocType, string>>;
+}): ChatMessage[] {
+  const related = DOC_DEPS[input.type]
+    .map((dependency) => {
+      const content = input.relatedDocs[dependency];
+      if (!content) return "";
+      return `--- ${dependency}.md ---\n${content.slice(0, 6_000)}`;
+    })
+    .filter(Boolean)
+    .join("\n\n");
+
+  return [
+    {
+      role: "system",
+      content: `Revisi dokumen ${input.type}.md sesuai instruksi pengguna.
+
+Kembalikan Markdown lengkap yang sudah direvisi. Bukan diff, bukan penjelasan, dan jangan membungkus seluruh dokumen dalam code fence.
+
+Aturan:
+- Pertahankan section wajib berikut: ${DOC_SECTIONS[input.type].join(", ")}.
+- Gunakan SpecModel sebagai sumber kebenaran; jangan mengarang entity, endpoint, requirement, atau role baru.
+- Gunakan ID kanonik (REQ-xxx, EP-xxx, BR-xxx) yang sama.
+- Jangan memakai placeholder TBD di luar Open Questions.
+- Bahasa Indonesia; istilah teknis boleh English.
+- Untuk ARCHITECTURE, pertahankan minimal satu graph/flowchart Mermaid dan satu sequenceDiagram.
+- Dokumen harus tetap konsisten dengan dokumen dependensi.`,
+    },
+    {
+      role: "user",
+      content: `Instruksi revisi:\n${input.instruction}\n\nSpecModel:\n${JSON.stringify(input.specModel, null, 2)}\n\nDokumen saat ini (${input.type}.md):\n${input.currentContent}\n\nDokumen dependensi:\n${related || "(tidak ada)"}\n\nTulis versi revisi lengkap sekarang.`,
+    },
+  ];
+}
+
 export function documentMessages(
   type: DocType,
   input: {

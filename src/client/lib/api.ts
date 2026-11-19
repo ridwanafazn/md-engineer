@@ -1,4 +1,9 @@
-import type { ProjectAnalysis, SpecModel, StackRecommendation } from "@/shared/types";
+import type {
+  ImpactPlan,
+  ProjectAnalysis,
+  SpecModel,
+  StackRecommendation,
+} from "@/shared/types";
 
 export type Project = {
   id: string;
@@ -46,6 +51,15 @@ export type DocumentVersion = {
   version: number;
   contentMd: string;
   reason: string;
+  createdAt: string;
+};
+
+export type ChatRow = {
+  id: string;
+  projectId: string;
+  role: "user" | "assistant" | "system";
+  content: string;
+  impactPlan: ImpactPlan | null;
   createdAt: string;
 };
 
@@ -124,7 +138,24 @@ export const api = {
       body: JSON.stringify({ status }),
     }),
   listVersions: (id: string, type: string) =>
-    request<{ versions: DocumentVersion[] }>(`/api/projects/${id}/documents/${type}/versions`),
+    request<{ versions: DocumentVersion[]; currentVersion: number }>(
+      `/api/projects/${id}/documents/${type}/versions`,
+    ),
+  restoreVersion: (id: string, type: string, version: number) =>
+    request<{ document: DocumentRow }>(`/api/projects/${id}/documents/${type}/restore`, {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    }),
+
+  listChat: (id: string) => request<{ messages: ChatRow[] }>(`/api/projects/${id}/chat`),
+  saveChatMessage: (
+    id: string,
+    input: { role: "user" | "assistant" | "system"; content: string; impactPlan?: ImpactPlan },
+  ) =>
+    request<{ message: ChatRow }>(`/api/projects/${id}/chat`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 
   getInterview: (id: string) => request<{ questions: InterviewRow[] }>(`/api/projects/${id}/interview`),
   saveInterview: (
