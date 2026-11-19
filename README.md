@@ -40,6 +40,7 @@ https://mdzs.ridwanafzn.workers.dev
 Fase 0 selesai: passcode auth, Neon, CRUD proyek/dokumen, dan AI aktif via OpenCode Go.
 Fase 1 selesai: intake → analysis → adaptive interview → stack → PRD full length.
 Fase 2 selesai: SpecModel + 15 dokumen, lint, Mermaid, diff, dan version snapshot.
+Fase 3 selesai: chat assistant, impact analysis, diff sebelum apply, apply multi-dokumen, dan restore versi.
 
 ## Local Development
 

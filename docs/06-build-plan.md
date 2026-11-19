@@ -66,18 +66,27 @@
 
 ---
 
-## Fase 3 — Chat + Impact Analysis
+## Fase 3 — Chat + Impact Analysis (selesai)
 
 **Tujuan:** revisi terkontrol.
 
-- Chat assistant.
-- Impact plan terstruktur.
-- Diff per dokumen.
-- Apply perubahan.
-- Snapshot versi.
-- Restore versi.
+- [x] Chat assistant dengan konteks SpecModel + 15 dokumen.
+- [x] Impact plan terstruktur (`reply`, `affected`, `instruction`).
+- [x] Diff modal sebelum apply.
+- [x] Revisi per dokumen dengan streaming.
+- [x] Apply multi-dokumen + snapshot versi otomatis.
+- [x] Persistensi chat di Neon.
+- [x] Restore versi dari tab Diff.
+- [x] Chat history + impact plan tersimpan.
 
-**Acceptance:** perubahan requirement memperbarui minimal 2 dokumen terkait dengan diff dan versi baru.
+**Hasil smoke:**
+- Impact plan: DATABASE, API, REQUIREMENTS, PRD, FEATURES, DESIGN.
+- DATABASE: v1 (4.199 kata) → v2 (4.482 kata) → restore v3 = konten v1.
+- API: v1 (4.227 kata) → v2 (4.711 kata) → restore v3 = konten v1.
+- Chat messages: 2.
+- Lint akhir: 15 dokumen, 0 error, 0 warning.
+
+**Acceptance:** perubahan requirement mengidentifikasi minimal 2 dokumen, revisi/apply/restore diverifikasi pada 2 dokumen dengan versi baru.
 
 ---
 
