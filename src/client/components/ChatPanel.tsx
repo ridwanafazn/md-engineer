@@ -9,6 +9,7 @@ import {
   type ChatResponse,
   type DocType,
   type ImpactPlan,
+  type SpecModel,
 } from "@/shared/types";
 
 type PendingRevision = {
@@ -31,6 +32,7 @@ export function ChatPanel({
 }) {
   const [messages, setMessages] = useState<ChatRow[]>([]);
   const [fullDocs, setFullDocs] = useState<DocumentRow[] | null>(null);
+  const [specModel, setSpecModel] = useState<SpecModel | null>(detail.project.specModel);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [impactPlan, setImpactPlan] = useState<ImpactPlan | null>(null);
@@ -66,9 +68,17 @@ export function ChatPanel({
     return docs;
   }
 
+  async function ensureSpecModel(): Promise<SpecModel> {
+    if (specModel) return specModel;
+    const result = await api.getSpecModel(projectId);
+    if (!result.specModel) throw new Error("SpecModel belum tersedia.");
+    setSpecModel(result.specModel);
+    return result.specModel;
+  }
+
   async function send() {
     const text = input.trim();
-    if (!text || sending || !detail.project.specModel) return;
+    if (!text || sending) return;
 
     setInput("");
     setError("");
@@ -86,6 +96,7 @@ export function ChatPanel({
 
     try {
       const docs = await ensureFullDocs();
+      const model = await ensureSpecModel();
       const savedUser = await api.saveChatMessage(projectId, { role: "user", content: text });
       setMessages((previous) => [...previous, savedUser.message]);
 
@@ -93,7 +104,7 @@ export function ChatPanel({
         chatImpactMessages({
           projectName: detail.project.name,
           idea: detail.project.idea,
-          specModel: detail.project.specModel,
+          specModel: model,
           documents: docs.map((document) => ({
             type: document.type as DocType,
             contentMd: document.contentMd,
@@ -136,7 +147,7 @@ export function ChatPanel({
   }
 
   async function prepareRevisions() {
-    if (!impactPlan || !detail.project.specModel) return;
+    if (!impactPlan) return;
     setPreparing(true);
     setError("");
     setProgress("Menyiapkan revisi…");
@@ -144,6 +155,7 @@ export function ChatPanel({
 
     try {
       const docs = await ensureFullDocs();
+      const model = await ensureSpecModel();
       for (const [index, affected] of impactPlan.affected.entries()) {
         const current = docs.find((document) => document.type === affected.doc);
         if (!current) continue;
@@ -163,7 +175,7 @@ export function ChatPanel({
             type: affected.doc,
             instruction: affected.instruction,
             currentContent: current.contentMd,
-            specModel: detail.project.specModel,
+            specModel: model,
             relatedDocs,
           }),
           `revision-${projectId}-${affected.doc}-${Date.now()}`,

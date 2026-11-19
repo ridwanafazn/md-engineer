@@ -34,10 +34,22 @@ Target: Cloudflare Workers Free — **10 ms CPU per invocation**.
 
 ## Sesudah optimasi
 
-Diukur ulang setelah deploy. Target:
+Diukur ulang setelah deploy dengan 5 request metadata dan 3 request dokumen:
 
-- Metadata project: **< 5 ms**.
-- Satu dokumen: **< 5 ms**.
-- Health/login: **< 3 ms**.
+| Skenario | CPU time |
+|---|---:|
+| `GET /api/health` | 0–2 ms |
+| `POST /api/auth/login` | 0–2 ms |
+| `GET /api/projects/:id?meta=1` | 8, 3, 2, 2, 2 ms |
+| `GET /api/projects/:id/documents/PRD` | 2 ms |
 
-Jika masih melewati 10 ms pada jalur normal, opsi berikutnya adalah memecah respons atau menunda fitur berat; bukan upgrade paid.
+**Hasil:** jalur baca normal berada di bawah 10 ms. Metadata project sempat 13 ms sebelum `specModel`/`analysis` dipisah; setelah pemisahan, maksimum 8 ms.
+
+Catatan:
+
+- Metadata tidak lagi mengirim `contentMd`, `specModel`, `analysis`, `stack`, atau interview.
+- `specModel` diambil terpisah saat chat membutuhkannya.
+- Dokumen diambil satu per satu; lint/export dilakukan di browser.
+- Penulisan dokumen sangat besar (217 KB) masih operasi berat, tetapi bukan jalur baca normal dan tidak dipakai saat workspace dibuka.
+
+Tidak ada upgrade ke Workers Paid.

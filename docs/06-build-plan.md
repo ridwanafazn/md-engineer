@@ -111,18 +111,31 @@
 
 ---
 
-## Fase 5 — Polish + Deploy
+## Fase 5 — Polish + Eval (selesai)
 
 **Tujuan:** kualitas dan rilis.
 
-- Eval 5 ide.
-- Perbaikan prompt.
-- Benchmark CPU Free.
-- Optimasi neumorphism/aksesibilitas.
-- Deploy `workers.dev`.
-- Dokumentasi penggunaan.
+- [x] Prompt diperbaiki: heading exact, placeholder endpoint, semua entity/endpoint/requirement.
+- [x] Aksesibilitas: label, dialog, live region, reduced motion.
+- [x] Dokumentasi performa, penggunaan, dan aksesibilitas.
+- [x] Benchmark CPU Free sebelum optimasi: project detail 17–55 ms.
+- [x] Lazy loading: metadata + isi dokumen per request.
+- [x] Export/lint/chat/share memakai lazy loading.
+- [x] Re-benchmark: metadata maksimum 8 ms; satu dokumen 2 ms; health/login 0–2 ms.
+- [x] Eval 5 ide: **semua skor 100**.
+- [x] Final deploy + verifikasi health.
 
-**Acceptance:** 5 ide lulus quality gate; tidak ada error CPU; URL aktif.
+**Hasil eval:**
+
+| Ide | Skor | Entities | Endpoints | Reqs | Durasi |
+|---|---:|---:|---:|---:|---:|
+| 1 — Marketplace jasa | 100 | 6 | 15 | 17 | 223s |
+| 2 — Inventory SaaS | 100 | 6 | 15 | 15 | 505s |
+| 3 — Booking salon | 100 | 6 | 15 | 14 | 350s |
+| 4 — Kursus online | 100 | 6 | 15 | 16 | 320s |
+| 5 — Tools internal | 100 | 6 | 15 | 12 | 291s |
+
+**Acceptance:** 5/5 ide lulus quality gate; jalur baca normal < 10 ms CPU; URL aktif; tanpa layanan paid tambahan.
 
 ---
 

@@ -1,0 +1,97 @@
+[
+  {
+    "index": 1,
+    "idea": "Marketplace jasa lokal untuk menghubungkan penyedia jasa seperti tukang, cleaner, dan montir dengan pelanggan di sekitar. Ada profil penyedia, pencarian, booking, pembayaran, dan ulasan.",
+    "projectId": "8a23fb3f-07f3-46b5-9078-977fc408445e",
+    "analysis": {
+      "roles": 4,
+      "features": 12,
+      "complexity": "medium"
+    },
+    "spec": {
+      "entities": 6,
+      "endpoints": 15,
+      "requirements": 17,
+      "flows": 5,
+      "businessRules": 6
+    },
+    "score": 100,
+    "durationMs": 223265
+  },
+  {
+    "index": 2,
+    "idea": "SaaS manajemen inventori untuk toko kecil: produk, stok, supplier, purchase order, penjualan, laporan stok rendah, dan multi-gudang sederhana.",
+    "projectId": "7ee82bbb-e659-4e02-aa72-0570ecd07bfa",
+    "analysis": {
+      "roles": 4,
+      "features": 12,
+      "complexity": "medium"
+    },
+    "spec": {
+      "entities": 6,
+      "endpoints": 15,
+      "requirements": 15,
+      "flows": 5,
+      "businessRules": 6
+    },
+    "score": 100,
+    "durationMs": 505446
+  },
+  {
+    "index": 3,
+    "idea": "Aplikasi booking layanan salon dan barbershop: jadwal, layanan, staf, pelanggan, pembayaran, dan reminder.",
+    "projectId": "166cf814-457e-4e96-908d-b042bb3f74e5",
+    "analysis": {
+      "roles": 4,
+      "features": 12,
+      "complexity": "medium"
+    },
+    "spec": {
+      "entities": 6,
+      "endpoints": 15,
+      "requirements": 14,
+      "flows": 5,
+      "businessRules": 6
+    },
+    "score": 100,
+    "durationMs": 350412
+  },
+  {
+    "index": 4,
+    "idea": "Platform kursus online: instruktur, kursus, video, kuis, enrollment, progres belajar, sertifikat, dan pembayaran.",
+    "projectId": "78196ee1-349a-4f2a-a12c-e961ba684d24",
+    "analysis": {
+      "roles": 4,
+      "features": 12,
+      "complexity": "complex"
+    },
+    "spec": {
+      "entities": 6,
+      "endpoints": 15,
+      "requirements": 16,
+      "flows": 4,
+      "businessRules": 6
+    },
+    "score": 100,
+    "durationMs": 319821
+  },
+  {
+    "index": 5,
+    "idea": "Tools internal untuk tim kecil: proyek, tugas, dokumen, approval, notifikasi, dan laporan mingguan.",
+    "projectId": "98b2a386-1aeb-4692-94c8-2a8739ef1fd0",
+    "analysis": {
+      "roles": 4,
+      "features": 12,
+      "complexity": "medium"
+    },
+    "spec": {
+      "entities": 6,
+      "endpoints": 15,
+      "requirements": 12,
+      "flows": 5,
+      "businessRules": 5
+    },
+    "score": 100,
+    "durationMs": 290948
+  }
+]

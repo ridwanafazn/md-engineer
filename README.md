@@ -42,6 +42,7 @@ Fase 1 selesai: intake → analysis → adaptive interview → stack → PRD ful
 Fase 2 selesai: SpecModel + 15 dokumen, lint, Mermaid, diff, dan version snapshot.
 Fase 3 selesai: chat assistant, impact analysis, diff sebelum apply, apply multi-dokumen, dan restore versi.
 Fase 4 selesai: export ZIP, commit GitHub per-request, shared read-only link, dan revoke.
+Fase 5 selesai: eval 5/5 ide skor 100, prompt polish, aksesibilitas, dan benchmark Free tier < 10 ms pada jalur baca normal.
 
 ## Local Development
 

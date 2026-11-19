@@ -210,17 +210,61 @@ app.get("/api/projects/:id", async (c) => {
   const db = getDb(c.env.DATABASE_URL);
   const [project] = await db.select().from(projects).where(eq(projects.id, c.req.param("id")));
   if (!project) return c.json({ error: "not_found" }, 404);
+
+  if (c.req.query("meta") === "1") {
+    const metaDocs = await db
+      .select({
+        id: documents.id,
+        projectId: documents.projectId,
+        type: documents.type,
+        title: documents.title,
+        slug: documents.slug,
+        status: documents.status,
+        version: documents.version,
+        wordCount: documents.wordCount,
+        generatedAt: documents.generatedAt,
+        updatedAt: documents.updatedAt,
+      })
+      .from(documents)
+      .where(eq(documents.projectId, project.id));
+    return c.json({
+      project: {
+        id: project.id,
+        name: project.name,
+        slug: project.slug,
+        idea: project.idea,
+        status: project.status,
+        language: project.language,
+        analysis: null,
+        stack: null,
+        docPlan: null,
+        specModel: null,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+      },
+      documents: metaDocs.map((document) => ({ ...document, contentMd: "" })),
+      interview: [],
+    });
+  }
+
   const docs = await db.select().from(documents).where(eq(documents.projectId, project.id));
   const interview = await db
     .select()
     .from(interviewQuestions)
     .where(eq(interviewQuestions.projectId, project.id))
     .orderBy(interviewQuestions.position);
-  const metaOnly = c.req.query("meta") === "1";
-  const responseDocs = metaOnly
-    ? docs.map(({ contentMd, ...rest }) => ({ ...rest, contentMd: "" }))
-    : docs;
-  return c.json({ project, documents: responseDocs, interview });
+  return c.json({ project, documents: docs, interview });
+});
+
+app.get("/api/projects/:id/spec-model", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const db = getDb(c.env.DATABASE_URL);
+  const [project] = await db
+    .select({ specModel: projects.specModel })
+    .from(projects)
+    .where(eq(projects.id, c.req.param("id")));
+  if (!project) return c.json({ error: "not_found" }, 404);
+  return c.json({ specModel: project.specModel });
 });
 
 app.get("/api/projects/:id/documents/:type", async (c) => {

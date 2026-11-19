@@ -1,11 +1,13 @@
-import { mkdirSync, writeFileSync } from "node:fs";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { analysisMessages, specModelMessages } from "../src/client/lib/prompts";
 import type { ProjectAnalysis, SpecModel, StackRecommendation } from "../src/shared/types";
 
 const base = process.env.MDZS_BASE_URL ?? "https://mdzs.ridwanafzn.workers.dev";
 const limit = Number(process.env.EVAL_LIMIT ?? "5");
 const keep = process.env.EVAL_KEEP === "1";
+const timeoutMs = Number(process.env.EVAL_TIMEOUT_MS ?? "360000");
+const only = process.env.EVAL_ONLY?.split(",").map(Number);
+const append = process.env.EVAL_APPEND === "1";
 const vars = Object.fromEntries(
   readFileSync(".dev.vars", "utf8")
     .split(/\r?\n/)
@@ -60,6 +62,7 @@ async function streamContent(body: Record<string, unknown>): Promise<string> {
         method: "POST",
         headers: { "Content-Type": "application/json", Cookie: cookie },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (!response.ok) throw new Error(`AI ${response.status}: ${(await response.text()).slice(0, 300)}`);
       const reader = response.body?.getReader();
@@ -121,7 +124,7 @@ const login = await fetch(`${base}/api/auth/login`, {
 if (!login.ok) throw new Error(`Login gagal: ${login.status}`);
 cookie = (login.headers.getSetCookie?.() ?? [login.headers.get("set-cookie") ?? ""])[0].split(";")[0];
 
-const results: {
+type EvalResult = {
   index: number;
   idea: string;
   projectId?: string;
@@ -136,9 +139,39 @@ const results: {
   score?: number;
   durationMs?: number;
   error?: string;
-}[] = [];
+};
+
+let results: EvalResult[] = [];
+if (append && existsSync("eval/results.json")) {
+  results = JSON.parse(readFileSync("eval/results.json", "utf8")) as EvalResult[];
+}
+
+function record(result: EvalResult) {
+  const position = results.findIndex((item) => item.index === result.index);
+  if (position >= 0) results[position] = result;
+  else results.push(result);
+  results.sort((a, b) => a.index - b.index);
+}
+
+function saveResults() {
+  mkdirSync("eval", { recursive: true });
+  writeFileSync("eval/results.json", JSON.stringify(results, null, 2));
+  const lines = [
+    "# Eval 5 Ide",
+    "",
+    "| # | Skor | Roles | Fitur | Entities | Endpoints | Reqs | Flows | Rules | Durasi | Status |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+  ];
+  for (const result of results) {
+    lines.push(
+      `| ${result.index} | ${result.score ?? "-"} | ${result.analysis?.roles ?? "-"} | ${result.analysis?.features ?? "-"} | ${result.spec?.entities ?? "-"} | ${result.spec?.endpoints ?? "-"} | ${result.spec?.requirements ?? "-"} | ${result.spec?.flows ?? "-"} | ${result.spec?.businessRules ?? "-"} | ${result.durationMs ? Math.round(result.durationMs / 1000) + "s" : "-"} | ${result.error ? "ERROR" : "OK"} |`,
+    );
+  }
+  writeFileSync("eval/report.md", `${lines.join("\n")}\n`);
+}
 
 for (const [index, idea] of ideas.entries()) {
+  if (only && !only.includes(index + 1)) continue;
   const started = Date.now();
   let projectId = "";
   console.log(`[eval] ${index + 1}/${ideas.length} start`);
@@ -191,7 +224,7 @@ for (const [index, idea] of ideas.entries()) {
     const score = Math.round((checks.filter(Boolean).length / checks.length) * 100);
     const durationMs = Date.now() - started;
 
-    results.push({
+    record({
       index: index + 1,
       idea,
       projectId,
@@ -213,8 +246,9 @@ for (const [index, idea] of ideas.entries()) {
     console.log(
       `[eval] ${index + 1} score=${score} entities=${specModel.entities.length} endpoints=${specModel.endpoints.length} reqs=${specModel.requirements.length} duration=${Math.round(durationMs / 1000)}s`,
     );
+    saveResults();
   } catch (caught) {
-    results.push({
+    record({
       index: index + 1,
       idea,
       projectId,
@@ -222,6 +256,7 @@ for (const [index, idea] of ideas.entries()) {
       durationMs: Date.now() - started,
     });
     console.log(`[eval] ${index + 1} ERROR: ${caught instanceof Error ? caught.message : caught}`);
+    saveResults();
   } finally {
     if (projectId && !keep) {
       await api(`/api/projects/${projectId}`, { method: "DELETE" }).catch(() => undefined);
@@ -229,18 +264,5 @@ for (const [index, idea] of ideas.entries()) {
   }
 }
 
-mkdirSync("eval", { recursive: true });
-writeFileSync("eval/results.json", JSON.stringify(results, null, 2));
-const lines = [
-  "# Eval 5 Ide",
-  "",
-  "| # | Skor | Roles | Fitur | Entities | Endpoints | Reqs | Flows | Rules | Durasi | Status |",
-  "|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
-];
-for (const result of results) {
-  lines.push(
-    `| ${result.index} | ${result.score ?? "-"} | ${result.analysis?.roles ?? "-"} | ${result.analysis?.features ?? "-"} | ${result.spec?.entities ?? "-"} | ${result.spec?.endpoints ?? "-"} | ${result.spec?.requirements ?? "-"} | ${result.spec?.flows ?? "-"} | ${result.spec?.businessRules ?? "-"} | ${result.durationMs ? Math.round(result.durationMs / 1000) + "s" : "-"} | ${result.error ? "ERROR" : "OK"} |`,
-  );
-}
-writeFileSync("eval/report.md", `${lines.join("\n")}\n`);
+saveResults();
 console.log("EVAL5_OK");

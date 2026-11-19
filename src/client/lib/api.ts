@@ -142,6 +142,8 @@ export const api = {
     request<ProjectDetail>(`/api/projects/${id}${meta ? "?meta=1" : ""}`),
   getDocument: (id: string, type: string) =>
     request<{ document: DocumentRow }>(`/api/projects/${id}/documents/${type}`),
+  getSpecModel: (id: string) =>
+    request<{ specModel: SpecModel | null }>(`/api/projects/${id}/spec-model`),
   updateProject: (id: string, patch: Record<string, unknown>) =>
     request<{ project: Project }>(`/api/projects/${id}`, {
       method: "PATCH",
