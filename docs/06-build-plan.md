@@ -20,7 +20,7 @@
 
 **Live:** https://mdzs.ridwanafzn.workers.dev
 
-**Acceptance:** login passcode berhasil, `/api/health` menunjukkan DB siap; AI menunggu API key OpenCode Go diisi pengguna.
+**Acceptance:** login passcode berhasil, `/api/health` menunjukkan `db=true` dan `ai=true`, smoke test AI mengembalikan `OK`.
 
 ---
 
