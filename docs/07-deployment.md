@@ -10,7 +10,7 @@ https://mdzs.ridwanafzn.workers.dev
 - Passcode auth aktif.
 - Neon terhubung.
 - CRUD proyek/dokumen berfungsi.
-- AI proxy siap, menunggu `OPENCODE_API_KEY`.
+- AI proxy aktif dan terhubung ke OpenCode Go.
 
 ## Secrets Production
 
@@ -19,25 +19,31 @@ Sudah dipasang:
 - `MDZS_PASSCODE`
 - `MDZS_SESSION_SECRET`
 - `DATABASE_URL`
-
-Belum dipasang:
-
 - `OPENCODE_API_KEY`
 
-Setelah mengisi `OPENCODE_API_KEY` di `.dev.vars`:
+## Verifikasi AI
+
+Health produksi:
+
+```json
+{"ok":true,"app":"mdzs","db":true,"ai":true}
+```
+
+Smoke test AI:
+
+```
+status=200
+content=OK
+```
+
+Model: `deepseek-v4.1-flash`, reasoning `max`, endpoint Go OpenAI-compatible.
+
+Untuk mengganti key:
 
 ```powershell
 $key = (Get-Content .dev.vars | Where-Object { $_ -match '^OPENCODE_API_KEY=' }) -replace '^OPENCODE_API_KEY=',''
 $key | npx wrangler secret put OPENCODE_API_KEY
 ```
-
-Lalu cek:
-
-```powershell
-curl.exe https://mdzs.ridwanafzn.workers.dev/api/health
-```
-
-Harus menampilkan `"ai":true`.
 
 ## Passcode
 

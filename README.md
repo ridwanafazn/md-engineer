@@ -37,8 +37,7 @@ scripts/              benchmark & utilitas
 
 https://mdzs.ridwanafazn.workers.dev
 
-Fase 0 selesai: passcode auth, Neon, CRUD proyek/dokumen, dan AI proxy.
-Isi `OPENCODE_API_KEY` di `.dev.vars` lalu set secret untuk mengaktifkan AI.
+Fase 0 selesai: passcode auth, Neon, CRUD proyek/dokumen, dan AI aktif via OpenCode Go.
 
 ## Local Development
 
