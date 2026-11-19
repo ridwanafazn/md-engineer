@@ -39,8 +39,12 @@ export function WorkspacePage({
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState("");
   const [lintReport, setLintReport] = useState<LintReport | null>(null);
+  const [linting, setLinting] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [showShare, setShowShare] = useState(false);
   const [showGithub, setShowGithub] = useState(false);
+  const [selectedContent, setSelectedContent] = useState("");
+  const [loadingContent, setLoadingContent] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -48,12 +52,8 @@ export function WorkspacePage({
     async (showLoading = false) => {
       if (showLoading) setLoading(true);
       try {
-        const data = await api.getProject(projectId);
+        const data = await api.getProject(projectId, true);
         setDetail(data);
-        const report = await lintDocuments(data.documents, data.project.specModel ?? null).catch(
-          () => null,
-        );
-        setLintReport(report);
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Gagal memuat workspace.");
       } finally {
@@ -73,7 +73,68 @@ export function WorkspacePage({
     setCompareVersion("previous");
     setVersions([]);
     setRestoreError("");
+    setSelectedContent("");
   }, [selected]);
+
+  useEffect(() => {
+    if (!selectedDoc) {
+      setSelectedContent("");
+      return;
+    }
+    let alive = true;
+    setLoadingContent(true);
+    void api
+      .getDocument(projectId, selected)
+      .then((result) => {
+        if (alive) setSelectedContent(result.document.contentMd);
+      })
+      .catch(() => {
+        if (alive) setSelectedContent("");
+      })
+      .finally(() => {
+        if (alive) setLoadingContent(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [projectId, selected, selectedDoc?.version]);
+
+  async function lintAll() {
+    if (!detail) return;
+    setLinting(true);
+    setError("");
+    try {
+      const fullDocs = [];
+      for (const document of detail.documents) {
+        const result = await api.getDocument(projectId, document.type);
+        fullDocs.push(result.document);
+      }
+      const report = await lintDocuments(fullDocs, detail.project.specModel ?? null);
+      setLintReport(report);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Lint gagal.");
+    } finally {
+      setLinting(false);
+    }
+  }
+
+  async function exportZip() {
+    if (!detail) return;
+    setExporting(true);
+    setError("");
+    try {
+      const fullDocs = [];
+      for (const document of detail.documents) {
+        const result = await api.getDocument(projectId, document.type);
+        fullDocs.push(result.document);
+      }
+      downloadProjectZip(detail.project.name, fullDocs);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Export ZIP gagal.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   useEffect(() => {
     if (tab !== "diff" || !selectedDoc) return;
@@ -199,10 +260,18 @@ export function WorkspacePage({
 
           <div className="mt-4 space-y-2">
             <button
-              onClick={() => downloadProjectZip(detail.project.name, detail.documents)}
-              className="neu-button w-full rounded-xl px-3 py-2.5 text-xs font-semibold text-white"
+              onClick={() => void exportZip()}
+              disabled={exporting}
+              className="neu-button w-full rounded-xl px-3 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
             >
-              Export ZIP
+              {exporting ? "Menyiapkan ZIP…" : "Export ZIP"}
+            </button>
+            <button
+              onClick={() => void lintAll()}
+              disabled={linting}
+              className="neu-button w-full rounded-xl px-3 py-2.5 text-xs font-medium text-[var(--text)] disabled:opacity-50"
+            >
+              {linting ? "Lint semua…" : "Lint semua"}
             </button>
             <button
               onClick={() => setShowShare(true)}
@@ -274,11 +343,15 @@ export function WorkspacePage({
                 <span className="ml-auto">{DOC_LABELS[selected]}</span>
               </div>
               <div className="flex-1 overflow-auto p-5">
-                {tab === "preview" ? (
-                  <MarkdownView markdown={selectedDoc.contentMd} />
+                {loadingContent ? (
+                  <div className="neu-inset rounded-2xl p-5 text-sm text-[var(--muted)]">
+                    Memuat dokumen…
+                  </div>
+                ) : tab === "preview" ? (
+                  <MarkdownView markdown={selectedContent} />
                 ) : tab === "raw" ? (
                   <pre className="whitespace-pre-wrap font-mono text-[13px] leading-7">
-                    {selectedDoc.contentMd}
+                    {selectedContent}
                   </pre>
                 ) : versionsLoading ? (
                   <div className="neu-inset rounded-2xl p-5 text-sm text-[var(--muted)]">
@@ -316,7 +389,7 @@ export function WorkspacePage({
                     </div>
                     <DiffView
                       oldText={compareSnapshot?.contentMd ?? ""}
-                      newText={selectedDoc.contentMd}
+                      newText={selectedContent}
                     />
                   </div>
                 )}

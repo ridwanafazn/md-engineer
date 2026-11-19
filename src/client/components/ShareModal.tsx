@@ -70,14 +70,21 @@ export function ShareModal({
   const revoked = links.filter((link) => link.revokedAt);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="share-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4"
+    >
       <div className="neu flex max-h-[90vh] w-full max-w-2xl flex-col p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
               Read-only
             </p>
-            <h3 className="text-xl font-semibold">Bagikan {projectName}</h3>
+            <h3 id="share-title" className="text-xl font-semibold">
+              Bagikan {projectName}
+            </h3>
             <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
               Siapa pun dengan link dapat membaca dokumen. Tidak bisa mengedit, tanpa akun. Link
               bisa dicabut kapan saja.
@@ -89,7 +96,7 @@ export function ShareModal({
         </div>
 
         {error ? (
-          <div className="mt-3 rounded-xl border border-red-200 bg-red-50/80 px-3 py-2 text-xs text-red-700">
+          <div role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50/80 px-3 py-2 text-xs text-red-700">
             {error}
           </div>
         ) : null}
@@ -118,6 +125,7 @@ export function ShareModal({
                 <div className="mt-2 flex gap-2">
                   <input
                     readOnly
+                    aria-label="URL share read-only"
                     value={link.url}
                     className="min-w-0 flex-1 rounded-lg bg-white/45 px-2 py-1.5 text-[11px] outline-none"
                   />

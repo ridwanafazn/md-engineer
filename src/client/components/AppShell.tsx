@@ -17,6 +17,7 @@ export function AppShell({
         <div className="flex items-center gap-4">
           <button
             onClick={onHome}
+            aria-label="Kembali ke proyek"
             className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[var(--surface)] text-sm font-semibold shadow-[5px_5px_10px_var(--shadow-dark),-5px_-5px_10px_var(--shadow-light)]"
             title="Kembali ke proyek"
           >

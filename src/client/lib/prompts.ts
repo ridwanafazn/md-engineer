@@ -366,16 +366,17 @@ ${sections}
 
 Aturan:
 - Markdown murni. Jangan membungkus seluruh dokumen dalam code fence.
+- Gunakan judul section persis seperti daftar di atas, termasuk nomornya.
 - Bahasa Indonesia; istilah teknis boleh English.
 - Minimal 800 kata. PRD minimal 1.500 kata.
 - Spesifik, bisa diuji, tanpa basa-basi.
 - Jangan memakai placeholder TBD di luar "Open Questions".
 - Jika ada ketidakpastian, tulis di Open Questions.
 - Dokumen ini harus konsisten dengan dokumen dependensi; jangan menyalin mentah, gunakan sebagai konteks.
-- Untuk ARCHITECTURE: wajib menyertakan minimal satu diagram Mermaid \`graph TD\` dan satu \`sequenceDiagram\`.
-- Untuk DATABASE: jelaskan entity, field, relasi, index, dan constraint.
-- Untuk API: gunakan endpoint dari SpecModel; sertakan method, path, auth, request, response, dan error.
-- Untuk REQUIREMENTS: setiap requirement memakai ID dan acceptance criteria.
+- Untuk ARCHITECTURE: wajib menyertakan minimal satu diagram Mermaid \`graph TD\` dan satu \`sequenceDiagram\`. Gunakan label sederhana, hindari tanda kurung yang tidak perlu di dalam label.
+- Untuk DATABASE: semua entity SpecModel wajib muncul; jelaskan entity, field, relasi, index, dan constraint.
+- Untuk API: semua endpoint SpecModel wajib muncul; gunakan method, path, auth, request, response, dan error. Gunakan placeholder \`{id}\`, \`{project_id}\`, \`{task_id}\`; jangan menulis UUID literal di path.
+- Untuk REQUIREMENTS: setiap requirement SpecModel wajib muncul dengan ID dan acceptance criteria.
 - Untuk TESTING: petakan test ke ID requirement.
 - Untuk TASKS: gunakan ID requirement dan urutan implementasi.
 - Untuk README: sertakan peta seluruh 15 dokumen.`,

@@ -57,14 +57,21 @@ export function GithubCommitModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="github-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4"
+    >
       <form onSubmit={submit} className="neu w-full max-w-xl p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
               GitHub
             </p>
-            <h3 className="text-xl font-semibold">Commit {projectName}</h3>
+            <h3 id="github-title" className="text-xl font-semibold">
+              Commit {projectName}
+            </h3>
             <p className="mt-1 text-xs leading-5 text-[var(--muted)]">
               15 dokumen akan ditulis ke folder target dalam satu commit. Branch harus sudah ada.
             </p>

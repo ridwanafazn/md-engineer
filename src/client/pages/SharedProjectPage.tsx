@@ -7,6 +7,8 @@ export function SharedProjectPage({ token }: { token: string }) {
   const [data, setData] = useState<SharedProject | null>(null);
   const [selected, setSelected] = useState<DocType>("PRD");
   const [tab, setTab] = useState<"preview" | "raw">("preview");
+  const [content, setContent] = useState("");
+  const [loadingContent, setLoadingContent] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -26,6 +28,31 @@ export function SharedProjectPage({ token }: { token: string }) {
       }
     })();
   }, [token]);
+
+  const selectedDoc = data?.documents.find((document) => document.type === selected);
+
+  useEffect(() => {
+    if (!selectedDoc) {
+      setContent("");
+      return;
+    }
+    let alive = true;
+    setLoadingContent(true);
+    void api
+      .getSharedDocument(token, selected)
+      .then((result) => {
+        if (alive) setContent(result.document.contentMd);
+      })
+      .catch(() => {
+        if (alive) setContent("");
+      })
+      .finally(() => {
+        if (alive) setLoadingContent(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [token, selected, selectedDoc?.version]);
 
   if (loading) {
     return (
@@ -47,8 +74,6 @@ export function SharedProjectPage({ token }: { token: string }) {
       </main>
     );
   }
-
-  const selectedDoc = data.documents.find((document) => document.type === selected);
 
   return (
     <div className="min-h-screen p-4 md:p-6">
@@ -126,12 +151,14 @@ export function SharedProjectPage({ token }: { token: string }) {
 
           {selectedDoc ? (
             <div className="flex-1 overflow-auto p-5">
-              {tab === "preview" ? (
-                <MarkdownView markdown={selectedDoc.contentMd} />
+              {loadingContent ? (
+                <div className="neu-inset rounded-2xl p-5 text-sm text-[var(--muted)]">
+                  Memuat dokumen…
+                </div>
+              ) : tab === "preview" ? (
+                <MarkdownView markdown={content} />
               ) : (
-                <pre className="whitespace-pre-wrap font-mono text-[13px] leading-7">
-                  {selectedDoc.contentMd}
-                </pre>
+                <pre className="whitespace-pre-wrap font-mono text-[13px] leading-7">{content}</pre>
               )}
             </div>
           ) : (

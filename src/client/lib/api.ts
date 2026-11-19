@@ -138,7 +138,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  getProject: (id: string) => request<ProjectDetail>(`/api/projects/${id}`),
+  getProject: (id: string, meta = false) =>
+    request<ProjectDetail>(`/api/projects/${id}${meta ? "?meta=1" : ""}`),
+  getDocument: (id: string, type: string) =>
+    request<{ document: DocumentRow }>(`/api/projects/${id}/documents/${type}`),
   updateProject: (id: string, patch: Record<string, unknown>) =>
     request<{ project: Project }>(`/api/projects/${id}`, {
       method: "PATCH",
@@ -187,6 +190,8 @@ export const api = {
       method: "POST",
     }),
   getSharedProject: (token: string) => request<SharedProject>(`/api/share/${token}`),
+  getSharedDocument: (token: string, type: string) =>
+    request<{ document: DocumentRow }>(`/api/share/${token}/documents/${type}`),
 
   commitGithub: (
     id: string,

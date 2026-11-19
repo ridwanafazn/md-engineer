@@ -216,7 +216,27 @@ app.get("/api/projects/:id", async (c) => {
     .from(interviewQuestions)
     .where(eq(interviewQuestions.projectId, project.id))
     .orderBy(interviewQuestions.position);
-  return c.json({ project, documents: docs, interview });
+  const metaOnly = c.req.query("meta") === "1";
+  const responseDocs = metaOnly
+    ? docs.map(({ contentMd, ...rest }) => ({ ...rest, contentMd: "" }))
+    : docs;
+  return c.json({ project, documents: responseDocs, interview });
+});
+
+app.get("/api/projects/:id/documents/:type", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const db = getDb(c.env.DATABASE_URL);
+  const [document] = await db
+    .select()
+    .from(documents)
+    .where(
+      and(
+        eq(documents.projectId, c.req.param("id")),
+        eq(documents.type, c.req.param("type")),
+      ),
+    );
+  if (!document) return c.json({ error: "not_found" }, 404);
+  return c.json({ document });
 });
 
 const interviewQuestionInput = z.object({
@@ -637,9 +657,31 @@ app.get("/api/share/:token", async (c) => {
       language: project.language,
       updatedAt: project.updatedAt,
     },
-    documents: docs,
+    documents: docs.map(({ contentMd, ...rest }) => ({ ...rest, contentMd: "" })),
     link: { createdAt: link.createdAt },
   });
+});
+
+app.get("/api/share/:token/documents/:type", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const db = getDb(c.env.DATABASE_URL);
+  const [link] = await db
+    .select()
+    .from(shareLinks)
+    .where(eq(shareLinks.token, c.req.param("token")));
+  if (!link || link.revokedAt) return c.json({ error: "not_found" }, 404);
+
+  const [document] = await db
+    .select()
+    .from(documents)
+    .where(
+      and(
+        eq(documents.projectId, link.projectId),
+        eq(documents.type, c.req.param("type")),
+      ),
+    );
+  if (!document) return c.json({ error: "not_found" }, 404);
+  return c.json({ document });
 });
 
 const githubCommitInput = z.object({

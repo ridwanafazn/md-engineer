@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { DiffView } from "@/client/components/DiffView";
-import { api, type ChatRow, type ProjectDetail } from "@/client/lib/api";
+import { api, type ChatRow, type DocumentRow, type ProjectDetail } from "@/client/lib/api";
 import { aiJson, aiStream } from "@/client/lib/ai";
 import { DOC_DEPS } from "@/client/lib/docs";
 import { chatImpactMessages, revisionMessages } from "@/client/lib/prompts";
@@ -30,6 +30,7 @@ export function ChatPanel({
   onDocsChanged: () => Promise<void>;
 }) {
   const [messages, setMessages] = useState<ChatRow[]>([]);
+  const [fullDocs, setFullDocs] = useState<DocumentRow[] | null>(null);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [impactPlan, setImpactPlan] = useState<ImpactPlan | null>(null);
@@ -52,16 +53,18 @@ export function ChatPanel({
     })();
   }, [projectId]);
 
-  const documentMap = useMemo(
-    () =>
-      detail.documents.map((document) => ({
-        type: document.type as DocType,
-        contentMd: document.contentMd,
-      })),
-    [detail.documents],
-  );
-
   const activeRevision = pending.find((revision) => revision.type === activeType) ?? pending[0];
+
+  async function ensureFullDocs(): Promise<DocumentRow[]> {
+    if (fullDocs) return fullDocs;
+    const docs: DocumentRow[] = [];
+    for (const document of detail.documents) {
+      const result = await api.getDocument(projectId, document.type);
+      docs.push(result.document);
+    }
+    setFullDocs(docs);
+    return docs;
+  }
 
   async function send() {
     const text = input.trim();
@@ -82,6 +85,7 @@ export function ChatPanel({
       }));
 
     try {
+      const docs = await ensureFullDocs();
       const savedUser = await api.saveChatMessage(projectId, { role: "user", content: text });
       setMessages((previous) => [...previous, savedUser.message]);
 
@@ -90,7 +94,10 @@ export function ChatPanel({
           projectName: detail.project.name,
           idea: detail.project.idea,
           specModel: detail.project.specModel,
-          documents: documentMap,
+          documents: docs.map((document) => ({
+            type: document.type as DocType,
+            contentMd: document.contentMd,
+          })),
           selectedType: selected,
           history,
           userMessage: text,
@@ -99,7 +106,7 @@ export function ChatPanel({
         32_000,
       );
 
-      const existingTypes = new Set(documentMap.map((document) => document.type));
+      const existingTypes = new Set(docs.map((document) => document.type));
       const affected = (response.impact?.affected ?? []).filter((item) =>
         existingTypes.has(item.doc),
       );
@@ -136,8 +143,9 @@ export function ChatPanel({
     const revisions: PendingRevision[] = [];
 
     try {
+      const docs = await ensureFullDocs();
       for (const [index, affected] of impactPlan.affected.entries()) {
-        const current = detail.documents.find((document) => document.type === affected.doc);
+        const current = docs.find((document) => document.type === affected.doc);
         if (!current) continue;
 
         setProgress(
@@ -146,7 +154,7 @@ export function ChatPanel({
         const relatedDocs = Object.fromEntries(
           DOC_DEPS[affected.doc].map((dependency) => [
             dependency,
-            detail.documents.find((document) => document.type === dependency)?.contentMd ?? "",
+            docs.find((document) => document.type === dependency)?.contentMd ?? "",
           ]),
         ) as Partial<Record<DocType, string>>;
 
@@ -214,6 +222,7 @@ export function ChatPanel({
       });
       setMessages((previous) => [...previous, saved.message]);
       await onDocsChanged();
+      setFullDocs(null);
       setModalOpen(false);
       setPending([]);
       setImpactPlan(null);
@@ -241,7 +250,7 @@ export function ChatPanel({
           </span>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
+        <div aria-live="polite" className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           {messages.length === 0 ? (
             <div className="neu-inset rounded-2xl p-4 text-sm leading-6 text-[var(--muted)]">
               Tanya apa saja tentang blueprint, atau minta perubahan seperti “tambahkan prioritas
@@ -287,7 +296,7 @@ export function ChatPanel({
           ) : null}
 
           {error ? (
-            <div className="rounded-2xl border border-red-200 bg-red-50/80 px-3 py-2 text-xs text-red-700">
+            <div role="alert" className="rounded-2xl border border-red-200 bg-red-50/80 px-3 py-2 text-xs text-red-700">
               {error}
             </div>
           ) : null}
@@ -306,30 +315,43 @@ export function ChatPanel({
               }}
               rows={2}
               disabled={sending || preparing || applying}
+              aria-label="Pesan untuk spec architect"
               placeholder="Tanya atau minta perubahan…"
               className="max-h-32 min-h-[2.5rem] flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-[var(--muted)]"
             />
             <button
               onClick={() => void send()}
               disabled={sending || preparing || applying || !input.trim()}
+              aria-label="Kirim pesan"
               className="neu-button flex h-9 w-9 items-center justify-center rounded-xl text-sm font-semibold text-white disabled:opacity-50"
             >
               ↑
             </button>
           </div>
-          {progress ? <p className="mt-2 px-1 text-[10px] text-[var(--muted)]">{progress}</p> : null}
+          {progress ? (
+            <p role="status" className="mt-2 px-1 text-[10px] text-[var(--muted)]">
+              {progress}
+            </p>
+          ) : null}
         </div>
       </div>
 
       {modalOpen && activeRevision ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="chat-diff-title"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/35 p-4"
+        >
           <div className="neu flex max-h-[92vh] w-full max-w-5xl flex-col p-5">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
                   Diff sebelum apply
                 </p>
-                <h3 className="text-xl font-semibold">Review {pending.length} dokumen</h3>
+                <h3 id="chat-diff-title" className="text-xl font-semibold">
+                  Review {pending.length} dokumen
+                </h3>
               </div>
               <button
                 onClick={() => {
