@@ -69,6 +69,28 @@ export type ProjectDetail = {
   interview: InterviewRow[];
 };
 
+export type ShareLink = {
+  id: string;
+  projectId: string;
+  token: string;
+  url: string;
+  createdAt: string;
+  revokedAt: string | null;
+};
+
+export type SharedProject = {
+  project: {
+    id: string;
+    name: string;
+    slug: string;
+    idea: string;
+    language: string;
+    updatedAt: string;
+  };
+  documents: DocumentRow[];
+  link: { createdAt: string };
+};
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -156,6 +178,27 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+
+  createShare: (id: string) =>
+    request<{ link: ShareLink }>(`/api/projects/${id}/share`, { method: "POST" }),
+  listShares: (id: string) => request<{ links: ShareLink[] }>(`/api/projects/${id}/share`),
+  revokeShare: (id: string, linkId: string) =>
+    request<{ link: ShareLink }>(`/api/projects/${id}/share/${linkId}/revoke`, {
+      method: "POST",
+    }),
+  getSharedProject: (token: string) => request<SharedProject>(`/api/share/${token}`),
+
+  commitGithub: (
+    id: string,
+    input: { repo: string; branch: string; token: string; pathPrefix?: string },
+  ) =>
+    request<{ commitSha: string; url: string; files: number }>(
+      `/api/projects/${id}/github/commit`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+    ),
 
   getInterview: (id: string) => request<{ questions: InterviewRow[] }>(`/api/projects/${id}/interview`),
   saveInterview: (

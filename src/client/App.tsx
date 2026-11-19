@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ProjectsPage } from "@/client/pages/ProjectsPage";
+import { SharedProjectPage } from "@/client/pages/SharedProjectPage";
 import { WizardPage } from "@/client/pages/WizardPage";
 import { WorkspacePage } from "@/client/pages/WorkspacePage";
 import { api } from "@/client/lib/api";
@@ -10,7 +11,7 @@ type View =
   | { name: "wizard"; id: string }
   | { name: "workspace"; id: string };
 
-export default function App() {
+function MainApp() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [view, setView] = useState<View>({ name: "projects" });
   const [passcode, setPasscode] = useState("");
@@ -133,4 +134,12 @@ export default function App() {
       onLogout={logout}
     />
   );
+}
+
+export default function App() {
+  const match = window.location.pathname.match(/^\/share\/([^/]+)\/?$/);
+  if (match) {
+    return <SharedProjectPage token={decodeURIComponent(match[1])} />;
+  }
+  return <MainApp />;
 }

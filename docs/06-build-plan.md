@@ -90,14 +90,22 @@
 
 ---
 
-## Fase 4 — Export + Share
+## Fase 4 — Export + Share (selesai)
 
 **Tujuan:** keluaran dan review.
 
-- Export ZIP di browser.
-- Commit ke GitHub via token.
-- Shared read-only link (token, tanpa login).
-- Cabut link.
+- [x] Export ZIP di browser (fflate, 15 dokumen + manifest).
+- [x] Commit GitHub via Git Data API.
+- [x] Token GitHub per-request, tidak disimpan di server.
+- [x] Shared read-only link (token, tanpa login).
+- [x] Halaman publik read-only + Markdown/Mermaid.
+- [x] Daftar link + revoke.
+
+**Hasil smoke:**
+- ZIP: 139.496 byte, 16 entry (15 dokumen + `MANIFEST.json`).
+- Share publik: status 200, 15 dokumen.
+- Revoke: status 404 setelah dicabut.
+- GitHub: 15 file masuk ke `docs/blueprints/phase4-smoke`, commit `b3ed21e`.
 
 **Acceptance:** ZIP berisi 15 file; commit masuk ke repo; link read-only bisa dibuka dan dicabut.
 

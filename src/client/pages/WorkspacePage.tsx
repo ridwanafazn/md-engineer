@@ -2,8 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/client/components/AppShell";
 import { ChatPanel } from "@/client/components/ChatPanel";
 import { DiffView } from "@/client/components/DiffView";
+import { GithubCommitModal } from "@/client/components/GithubCommitModal";
 import { MarkdownView } from "@/client/components/MarkdownView";
+import { ShareModal } from "@/client/components/ShareModal";
 import { api, type DocumentVersion, type ProjectDetail } from "@/client/lib/api";
+import { downloadProjectZip } from "@/client/lib/export";
 import { lintDocuments, type LintReport } from "@/client/lib/lint";
 import { DOC_LABELS, DOC_TYPES, type DocType } from "@/shared/types";
 
@@ -36,6 +39,8 @@ export function WorkspacePage({
   const [restoring, setRestoring] = useState(false);
   const [restoreError, setRestoreError] = useState("");
   const [lintReport, setLintReport] = useState<LintReport | null>(null);
+  const [showShare, setShowShare] = useState(false);
+  const [showGithub, setShowGithub] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -194,16 +199,28 @@ export function WorkspacePage({
 
           <div className="mt-4 space-y-2">
             <button
-              onClick={() => onResume(projectId)}
+              onClick={() => downloadProjectZip(detail.project.name, detail.documents)}
               className="neu-button w-full rounded-xl px-3 py-2.5 text-xs font-semibold text-white"
             >
-              Lanjutkan wizard
+              Export ZIP
             </button>
             <button
-              disabled
-              className="neu-button w-full rounded-xl px-3 py-2.5 text-xs font-medium text-[var(--text)] opacity-50"
+              onClick={() => setShowShare(true)}
+              className="neu-button w-full rounded-xl px-3 py-2.5 text-xs font-medium text-[var(--text)]"
             >
-              Export semua · Fase 4
+              Share read-only
+            </button>
+            <button
+              onClick={() => setShowGithub(true)}
+              className="neu-button w-full rounded-xl px-3 py-2.5 text-xs font-medium text-[var(--text)]"
+            >
+              Commit GitHub
+            </button>
+            <button
+              onClick={() => onResume(projectId)}
+              className="neu-button w-full rounded-xl px-3 py-2.5 text-xs font-medium text-[var(--muted)]"
+            >
+              Lanjutkan wizard
             </button>
           </div>
         </aside>
@@ -340,6 +357,22 @@ export function WorkspacePage({
           />
         </aside>
       </div>
+
+      {showShare ? (
+        <ShareModal
+          projectId={projectId}
+          projectName={detail.project.name}
+          onClose={() => setShowShare(false)}
+        />
+      ) : null}
+
+      {showGithub ? (
+        <GithubCommitModal
+          projectId={projectId}
+          projectName={detail.project.name}
+          onClose={() => setShowGithub(false)}
+        />
+      ) : null}
     </AppShell>
   );
 }

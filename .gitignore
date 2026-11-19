@@ -9,6 +9,7 @@ dist/
 drizzle/meta/
 scripts/phase2-*.mjs
 scripts/phase3-*.mjs
+scripts/phase4-*.mjs
 *.log
 .DS_Store
 Thumbs.db

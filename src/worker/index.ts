@@ -9,6 +9,7 @@ import {
   documents,
   interviewQuestions,
   projects,
+  shareLinks,
 } from "../db/schema";
 import { DOC_TYPES, type DocType } from "../shared/types";
 
@@ -131,7 +132,13 @@ app.post("/api/auth/logout", (c) => {
 
 app.use("/api/*", async (c, next) => {
   const path = new URL(c.req.url).pathname;
-  if (path === "/api/health" || path === "/api/auth/login") return next();
+  if (
+    path === "/api/health" ||
+    path === "/api/auth/login" ||
+    path.startsWith("/api/share/")
+  ) {
+    return next();
+  }
   const token = getCookie(c, SESSION_COOKIE);
   if (!token || !c.env.MDZS_SESSION_SECRET || !(await verifySession(token, c.env.MDZS_SESSION_SECRET))) {
     return c.json({ error: "unauthorized" }, 401);
@@ -520,6 +527,191 @@ app.patch("/api/projects/:id/documents/:type", async (c) => {
     .returning();
   if (!document) return c.json({ error: "not_found" }, 404);
   return c.json({ document });
+});
+
+function toBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
+async function githubRequest(
+  token: string,
+  path: string,
+  method: "GET" | "POST" | "PATCH" = "GET",
+  body?: unknown,
+): Promise<any> {
+  const response = await fetch(`https://api.github.com${path}`, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+      "User-Agent": "mdzs/0.1",
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const text = await response.text();
+  if (!response.ok) {
+    throw new Error(`GitHub ${response.status}: ${text.slice(0, 500)}`);
+  }
+  return text ? JSON.parse(text) : null;
+}
+
+app.post("/api/projects/:id/share", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const db = getDb(c.env.DATABASE_URL);
+  const projectId = c.req.param("id");
+  const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+  if (!project) return c.json({ error: "not_found" }, 404);
+
+  const token = toBase64Url(crypto.getRandomValues(new Uint8Array(24)));
+  const [link] = await db.insert(shareLinks).values({ projectId, token }).returning();
+  const origin = new URL(c.req.url).origin;
+  return c.json(
+    {
+      link: {
+        ...link,
+        url: `${origin}/share/${token}`,
+      },
+    },
+    201,
+  );
+});
+
+app.get("/api/projects/:id/share", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const db = getDb(c.env.DATABASE_URL);
+  const origin = new URL(c.req.url).origin;
+  const links = await db
+    .select()
+    .from(shareLinks)
+    .where(eq(shareLinks.projectId, c.req.param("id")))
+    .orderBy(desc(shareLinks.createdAt));
+  return c.json({
+    links: links.map((link) => ({
+      ...link,
+      url: `${origin}/share/${link.token}`,
+    })),
+  });
+});
+
+app.post("/api/projects/:id/share/:linkId/revoke", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const db = getDb(c.env.DATABASE_URL);
+  const [link] = await db
+    .update(shareLinks)
+    .set({ revokedAt: new Date() })
+    .where(
+      and(
+        eq(shareLinks.id, c.req.param("linkId")),
+        eq(shareLinks.projectId, c.req.param("id")),
+      ),
+    )
+    .returning();
+  if (!link) return c.json({ error: "not_found" }, 404);
+  return c.json({ link });
+});
+
+app.get("/api/share/:token", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const db = getDb(c.env.DATABASE_URL);
+  const [link] = await db
+    .select()
+    .from(shareLinks)
+    .where(eq(shareLinks.token, c.req.param("token")));
+  if (!link || link.revokedAt) return c.json({ error: "not_found" }, 404);
+
+  const [project] = await db.select().from(projects).where(eq(projects.id, link.projectId));
+  if (!project) return c.json({ error: "not_found" }, 404);
+  const docs = await db.select().from(documents).where(eq(documents.projectId, project.id));
+
+  return c.json({
+    project: {
+      id: project.id,
+      name: project.name,
+      slug: project.slug,
+      idea: project.idea,
+      language: project.language,
+      updatedAt: project.updatedAt,
+    },
+    documents: docs,
+    link: { createdAt: link.createdAt },
+  });
+});
+
+const githubCommitInput = z.object({
+  repo: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+  branch: z.string().min(1).max(120).default("main"),
+  token: z.string().min(20).max(500),
+  pathPrefix: z.string().max(160).optional(),
+});
+
+app.post("/api/projects/:id/github/commit", async (c) => {
+  if (!c.env.DATABASE_URL) return c.json({ error: "database_not_configured" }, 503);
+  const parsed = githubCommitInput.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) return c.json({ error: "invalid_request" }, 400);
+
+  const db = getDb(c.env.DATABASE_URL);
+  const [project] = await db.select().from(projects).where(eq(projects.id, c.req.param("id")));
+  if (!project) return c.json({ error: "not_found" }, 404);
+  const docs = await db.select().from(documents).where(eq(documents.projectId, project.id));
+  if (docs.length === 0) return c.json({ error: "no_documents" }, 400);
+
+  const { repo, branch, token } = parsed.data;
+  const prefix = (parsed.data.pathPrefix || "docs")
+    .replace(/^\/+|\/+$/g, "")
+    .replace(/\.\./g, "");
+
+  try {
+    const ref = await githubRequest(token, `/repos/${repo}/git/ref/heads/${branch}`);
+    const parentSha = ref.object.sha;
+    const parentCommit = await githubRequest(token, `/repos/${repo}/git/commits/${parentSha}`);
+
+    const treeEntries: { path: string; mode: string; type: string; sha: string }[] = [];
+    for (const document of docs) {
+      const blob = await githubRequest(token, `/repos/${repo}/git/blobs`, "POST", {
+        content: toBase64(document.contentMd),
+        encoding: "base64",
+      });
+      treeEntries.push({
+        path: `${prefix}/${document.type}.md`,
+        mode: "100644",
+        type: "blob",
+        sha: blob.sha,
+      });
+    }
+
+    const tree = await githubRequest(token, `/repos/${repo}/git/trees`, "POST", {
+      base_tree: parentCommit.tree.sha,
+      tree: treeEntries,
+    });
+    const commit = await githubRequest(token, `/repos/${repo}/git/commits`, "POST", {
+      message: `docs: update mdzs blueprint for ${project.name}`,
+      tree: tree.sha,
+      parents: [parentSha],
+    });
+    await githubRequest(token, `/repos/${repo}/git/refs/heads/${branch}`, "PATCH", {
+      sha: commit.sha,
+      force: false,
+    });
+
+    return c.json({
+      commitSha: commit.sha,
+      url: `https://github.com/${repo}/commit/${commit.sha}`,
+      files: treeEntries.length,
+    });
+  } catch (caught) {
+    return c.json(
+      {
+        error: "github_commit_failed",
+        message: caught instanceof Error ? caught.message : "GitHub commit gagal.",
+      },
+      502,
+    );
+  }
 });
 
 const aiSchema = z.object({

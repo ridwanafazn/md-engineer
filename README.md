@@ -41,6 +41,7 @@ Fase 0 selesai: passcode auth, Neon, CRUD proyek/dokumen, dan AI aktif via OpenC
 Fase 1 selesai: intake → analysis → adaptive interview → stack → PRD full length.
 Fase 2 selesai: SpecModel + 15 dokumen, lint, Mermaid, diff, dan version snapshot.
 Fase 3 selesai: chat assistant, impact analysis, diff sebelum apply, apply multi-dokumen, dan restore versi.
+Fase 4 selesai: export ZIP, commit GitHub per-request, shared read-only link, dan revoke.
 
 ## Local Development
 
